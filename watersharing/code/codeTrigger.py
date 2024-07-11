@@ -56,6 +56,7 @@ def is_process_running(process_name):
     output = subprocess.Popen(["pgrep", "-f", process_name], stdout=subprocess.PIPE).communicate()[0]
     return len(output.strip()) > 0
 
+#Load paths from config.yaml
 def load_config(config_file_path, mode):
     with open(config_file_path, 'r') as file:
         config = yaml.safe_load(file)
