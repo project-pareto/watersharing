@@ -1,0 +1,7 @@
+local_vars:
+  ex_path_var: "./export_local"
+  in_path_var: "./import_local"
+
+production_vars:
+  ex_path_var: "/var/www/share.producedwater.org/wp-content/plugins/watersharing/io/export/"
+  in_path_var: "/var/www/share.producedwater.org/wp-content/plugins/watersharing/io/import/"

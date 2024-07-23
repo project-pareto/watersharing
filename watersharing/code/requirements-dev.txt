@@ -1,0 +1,14 @@
+pytest==6.2.*
+pytest-cov
+black==22.3.0
+pre-commit==2.16.*
+sphinx
+myst-parser[linkify]
+sphinx_rtd_theme
+nbsphinx
+addheader
+glob2
+watchdog
+ipyleaflet
+pandas
+--editable .
