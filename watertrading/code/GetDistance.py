@@ -44,15 +44,14 @@ import json
 from Utilities import df_to_dict_helper
 
 
-def get_driving_distance(DISTANCE_JSON,DF_PRODUCER,DF_CONSUMER): 
+def get_driving_distance(distance_JSON, DF_PRODUCER, DF_CONSUMER):
     """
-    DISTANCE_JSON - directory to distance JSON file
+    distance_JSON - directory to distance JSON file
     DF_PRODUCER - Producer dataframe
     DF_CONSUMER - Consumer dataframe
     """
-    origin = DF_PRODUCER.set_index(['Wellpad']).T.to_dict()
-    destination = DF_CONSUMER.set_index(['Wellpad']).T.to_dict()
-
+    origin = DF_PRODUCER.set_index(["Wellpad"]).T.to_dict()
+    destination = DF_CONSUMER.set_index(["Wellpad"]).T.to_dict()
 
     origins_loc = []
     destination_loc = []
@@ -61,8 +60,7 @@ def get_driving_distance(DISTANCE_JSON,DF_PRODUCER,DF_CONSUMER):
 
     api = "open_street_map"
     api_key = None
-    output = 'time_distance'
-    
+    output = "time_distance"
 
     create_report = True
 
@@ -76,8 +74,6 @@ def get_driving_distance(DISTANCE_JSON,DF_PRODUCER,DF_CONSUMER):
             raise Warning("Please provide a valid api_key")
     else:
         raise Warning("{0} API service is not supported".format(api))
-
-
 
     # =======================================================================
     #                          PREPARING DATA FORMAT
@@ -252,16 +248,19 @@ def get_driving_distance(DISTANCE_JSON,DF_PRODUCER,DF_CONSUMER):
         else:
             raise Warning("Error when requesting data, make sure your API key is valid")
 
-
     if create_report is True:
         # Dataframes df_times and df_distance are output as dictionaries in JSON format whose directory
-        # and name are defined by variable 'DISTANCE_JSON'
-        #df_times_dict = df_to_dict_helper(df_times)
-        df_times_dict = df_times.transpose().to_dict(orient='index')
-        #df_distance_dict = df_to_dict_helper(df_distance)
-        df_distance_dict = df_distance.transpose().to_dict(orient='index')
-        with open(DISTANCE_JSON, "w") as data_file:
-            json.dump({"DriveTimes":df_times_dict,"DriveDistances":df_distance_dict}, data_file, indent=2)
+        # and name are defined by variable 'distance_JSON'
+        # df_times_dict = df_to_dict_helper(df_times)
+        df_times_dict = df_times.transpose().to_dict(orient="index")
+        # df_distance_dict = df_to_dict_helper(df_distance)
+        df_distance_dict = df_distance.transpose().to_dict(orient="index")
+        with open(distance_JSON, "w") as data_file:
+            json.dump(
+                {"DriveTimes": df_times_dict, "DriveDistances": df_distance_dict},
+                data_file,
+                indent=2,
+            )
 
     # Identify what type of data is returned by the method
     if output in ("time", None):
@@ -275,10 +274,5 @@ def get_driving_distance(DISTANCE_JSON,DF_PRODUCER,DF_CONSUMER):
             "Provide a valid type of output, valid options are:\
                         time, distance, time_distance"
         )
-    
 
     return df_times, df_distance
-
-
-    
-
