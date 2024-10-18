@@ -36,7 +36,6 @@ def run_optimization_models(
     (
         df_producer,
         df_consumer,
-        df_midstream,
         df_restrictions,
         df_distance,
         df_time,
@@ -62,7 +61,6 @@ def run_optimization_models(
         df_restrictions,
         df_producer,
         df_consumer,
-        df_midstream,
         df_distance,
         df_time,
         default={},

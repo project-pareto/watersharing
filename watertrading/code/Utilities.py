@@ -30,7 +30,7 @@ def df_to_dict_helper(df):
 
 ##################################################
 def csv_2_json(
-    input_dir, PRODUCER_CSV, CONSUMER_CSV, MIDSTREAM_CSV, name="jsonized_data.json"
+    input_dir, PRODUCER_CSV, CONSUMER_CSV, name="jsonized_data.json"
 ):
     """
     A function that converts existing case study .csv data files into the newer JSON format
@@ -63,21 +63,9 @@ def csv_2_json(
     df_consumer["Start Date"] = df_consumer["Start Date"].dt.strftime("%Y/%m/%d")
     df_consumer["End Date"] = df_consumer["End Date"].dt.strftime("%Y/%m/%d")
 
-    # Read in midstream data; convert date data to datetime to enforce proper format, and then to string for JSON export (datetime is not compatible)
-    df_midstream = pd.read_csv(os.path.join(input_dir, MIDSTREAM_CSV))
-    df_midstream["Start Date"] = pd.to_datetime(
-        df_midstream["Start Date"], format="%Y/%m/%d"
-    )
-    df_midstream["End Date"] = pd.to_datetime(
-        df_midstream["End Date"], format="%Y/%m/%d"
-    )
-    df_midstream["Start Date"] = df_midstream["Start Date"].dt.strftime("%Y/%m/%d")
-    df_midstream["End Date"] = df_midstream["End Date"].dt.strftime("%Y/%m/%d")
-
     # Convert dataframes to dictionaries for export (we will use json.dump, not the pandas built-in function)
     d_producer = df_producer.to_dict(orient="records")
     d_consumer = df_consumer.to_dict(orient="records")
-    d_midstream = df_midstream.to_dict(orient="records")
     d_restriction = (
         dict()
     )  # this is initialized so that it exists in the output; it will be managed by WordPress
@@ -88,7 +76,6 @@ def csv_2_json(
             {
                 "Producers": d_producer,
                 "Consumers": d_consumer,
-                "Midstreams": d_midstream,
                 "Restrictions": d_restriction,
             },
             data_file,

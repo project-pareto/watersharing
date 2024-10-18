@@ -32,6 +32,37 @@ from Utilities import (
 
 
 ##################################################
+# CREATE CONFIG DICTIONARY
+CONFIG = ConfigBlock()
+CONFIG.declare(
+    "has_pipeline_constraints",
+    ConfigValue(
+        default=True,
+        domain=Bool,
+        description="build pipeline constraints",
+        doc="""Indicates whether pipeline constraints should be constructed or not.
+**default** - True.
+**Valid values:** {
+**True** - construct pipeline constraints,
+**False** - do not construct pipeline constraints}""",
+    ),
+)
+CONFIG.declare(
+    "has_trucking_constraints",
+    ConfigValue(
+        default=True,
+        domain=Bool,
+        description="build trucking constraints",
+        doc="""Indicates whether trucking constraints should be constructed or not.
+**default** - True.
+**Valid values:** {
+**True** - construct trucking constraints,
+**False** - do not construct trucking constraints}""",
+    ),
+)
+
+
+##################################################
 # GET DATA FUNCTION
 def get_data(
     request_dir,
@@ -60,13 +91,12 @@ def get_data(
     with open(request_dir, "r") as read_file:
         request_data = json.load(read_file)
 
-        # Place producer, consumer, and midstream data into dataframes
+        # Place producer and consumer data into dataframes
         df_producer = pd.DataFrame(data=request_data["Producers"])
         df_consumer = pd.DataFrame(data=request_data["Consumers"])
-        df_midstream = pd.DataFrame(data=request_data["Midstreams"])
         df_restrictions = pd.DataFrame(data=request_data["Restrictions"])
         if filter_by_date is not None:
-            FilterRequests(df_producer, df_consumer, df_midstream, filter_by_date)
+            FilterRequests(df_producer, df_consumer, filter_by_date)
 
     # Clean and process input data
     # convert time inputs to datetime
@@ -85,13 +115,9 @@ def get_data(
         df_consumer["End Date"], format="%Y/%m/%d", errors="coerce"
     )
 
-    # convert time inputs to datetime
-    df_midstream["Start Date"] = pd.to_datetime(
-        df_midstream["Start Date"], format="%Y/%m/%d", errors="coerce"
-    )
-    df_midstream["End Date"] = pd.to_datetime(
-        df_midstream["End Date"], format="%Y/%m/%d", errors="coerce"
-    )
+    # add unique keys for wellpads as userID-wellpadID-Lon-Lat (in case multiple users have duplicate names)
+    df_producer["WellpadUnique"] = df_producer["Index"] + df_producer["Wellpad"] + df_producer["Longitude"].astype(str) + df_producer["Latitude"].astype(str)
+    df_consumer["WellpadUnique"] = df_consumer["Index"] + df_consumer["Wellpad"] + df_producer["Longitude"].astype(str)+ df_producer["Latitude"].astype(str)
 
     # Initialize dataframes ()
     df_distance = pd.DataFrame()
@@ -110,7 +136,7 @@ def get_data(
         df_time = pd.DataFrame(data=distance_data["DriveTimes"])
 
     print("input data instance created")
-    return df_producer, df_consumer, df_midstream, df_restrictions, df_distance, df_time
+    return df_producer, df_consumer, df_restrictions, df_distance, df_time
 
 
 ##################################################
@@ -119,7 +145,6 @@ def create_model(
     restricted_set,
     df_producer,
     df_consumer,
-    df_midstream,
     df_distance,
     df_time,
     default={},
@@ -136,7 +161,6 @@ def create_model(
     # add data frames to model
     model.df_producer = df_producer
     model.df_consumer = df_consumer
-    model.df_midstream = df_midstream
     model.df_distance = df_distance
     model.df_time = df_time
 
@@ -158,12 +182,10 @@ def create_model(
     first_date = min(
         df_producer["Start Date"]
         .append(df_consumer["Start Date"])
-        .append(df_midstream["Start Date"])
     )
     last_date = max(
         df_producer["End Date"]
         .append(df_consumer["End Date"])
-        .append(df_midstream["End Date"])
     )
 
     # map dates to a dictionary with index
@@ -197,10 +219,6 @@ def create_model(
         doc="Consumer entry index"
     )
 
-    model.s_MI = Set(
-        initialize=model.df_midstream["Index"], doc="Midstream entry index"
-    )
-
     model.s_PP = Set(
         initialize=model.df_producer["Wellpad"],
         doc="Producer wellpad"
@@ -211,13 +229,32 @@ def create_model(
         doc="Consumer wellpad"
     )
 
+    model.s_PPUnique = Set(
+        initialize=model.df_producer["WellpadUnique"],
+        doc="Producer wellpad name; not necessarily unique"
+    )
+
+    model.s_CPUnique = Set(
+        initialize=model.df_consumer["WellpadUnique"],
+        doc="Consumer wellpad name; not necessarily unique"
+    )
+
     ### PARAMETERS
+    # Producer parameters
     Producer_Wellpad = dict(zip(model.df_producer.Index, model.df_producer.Wellpad))
     model.p_ProducerPad = Param(
         model.s_PI,
         within=Any,  # to suppress Pyomo warning
         initialize=Producer_Wellpad,
         doc="Map producer wellpad to the entry index",
+    )
+
+    Producer_WellpadUnique = dict(zip(model.df_producer.Index, model.df_producer.WellpadUnique))
+    model.p_ProducerPadUnique = Param(
+        model.s_PI,
+        within=Any,  # to suppress Pyomo warning
+        initialize=Producer_WellpadUnique,
+        doc="Map producer wellpad to the entry index using unique keys",
     )
 
     Producer_Operator = dict(
@@ -287,55 +324,105 @@ def create_model(
         doc="Producer water supply bid [currency_volume]",
     )
 
-    Producer_Transport_Bid = dict(
+    ProducerMaxRangeTruck = dict(
         zip(
             model.df_producer.Index,
-            model.df_producer["Transport Bid (USD/bbl)"]
+            model.df_producer["Truck Max Dist (mi)"]
         )
     )
-    model.p_ProducerTransportBid = Param(
+    model.p_ProducerMaxRangeTruck = Param(
         model.s_PI,
         within=Any,  # to suppress Pyomo warning
-        initialize=Producer_Transport_Bid,
-        units=model.model_units["currency_volume-distance"],
-        doc="Producer water transport bid [currency_volume-distance]",
-    )
-
-    Producer_Maxdis = dict(
-        zip(
-            model.df_producer.Index,
-            model.df_producer["Max Transport (mi)"]
-        )
-    )
-    model.p_ProducerMaxdis = Param(
-        model.s_PI,
-        within=Any,  # to suppress Pyomo warning
-        initialize=Producer_Maxdis,
+        initialize=ProducerMaxRangeTruck,
         units=model.model_units["distance"],
-        doc="Maximum producer trucking distance [distance]",
+        doc="Maximum producer trucking range [distance]",
     )
 
-    # Dictionaries mapping unique wellpad entries to corresponding Lat/Lon coordinates
-    model.p_ProducerWellpadLon = GetUniqueDFData(
-        model.df_producer, "Wellpad", "Longitude"
+    ProducerTransportCapacityTruck = dict(
+        zip(
+            model.df_producer.Index,
+            model.df_producer["Trucking Capacity (bpd)"]
+        )
     )
-    model.p_ProducerWellpadLat = GetUniqueDFData(
-        model.df_producer, "Wellpad", "Latitude"
-    )
-    model.p_ConsumerWellpadLon = GetUniqueDFData(
-        model.df_consumer, "Wellpad", "Longitude"
-    )
-    model.p_ConsumerWellpadLat = GetUniqueDFData(
-        model.df_consumer, "Wellpad", "Latitude"
+    model.p_ProducerTransportCapacityTruck = Param(
+        model.s_PI,
+        within=Any,  # to suppress Pyomo warning
+        initialize=ProducerTransportCapacityTruck,
+        units=model.model_units["volume_time"],
+        doc="Producer water trucking capacity [volume_time]",
     )
 
-    # consumers
+    ProducerTransportBidTruck = dict(
+        zip(
+            model.df_producer.Index,
+            model.df_producer["Truck Transport Bid (USD/bbl)"]
+        )
+    )
+    model.p_ProducerTransportBidTruck = Param(
+        model.s_PI,
+        within=Any,  # to suppress Pyomo warning
+        initialize=ProducerTransportBidTruck,
+        units=model.model_units["currency_volume"],
+        doc="Producer water trucking bid [currency_volume]",
+    )
+
+    ProducerMaxRangePipel = dict(
+        zip(
+            model.df_producer.Index,
+            model.df_producer["Pipe Max Dist (mi)"]
+        )
+    )
+    model.p_ProducerMaxRangePipel = Param(
+        model.s_PI,
+        within=Any,  # to suppress Pyomo warning
+        initialize=ProducerMaxRangePipel,
+        units=model.model_units["distance"],
+        doc="Maximum producer pipeline range [distance]",
+    )
+
+    ProducerTransportCapacityPipel = dict(
+        zip(
+            model.df_producer.Index,
+            model.df_producer["Pipeline Capacity (bpd)"]
+        )
+    )
+    model.p_ProducerTransportCapacityPipel = Param(
+        model.s_PI,
+        within=Any,  # to suppress Pyomo warning
+        initialize=ProducerTransportCapacityPipel,
+        units=model.model_units["volume_time"],
+        doc="Producer water pipeline capacity [volume_time]",
+    )
+
+    ProducerTransportBidPipel = dict(
+        zip(
+            model.df_producer.Index,
+            model.df_producer["Pipe Transport Bid (USD/bbl)"]
+        )
+    )
+    model.p_ProducerTransportBidPipel = Param(
+        model.s_PI,
+        within=Any,  # to suppress Pyomo warning
+        initialize=ProducerTransportBidPipel,
+        units=model.model_units["currency_volume"],
+        doc="Producer water pipeline bid [currency_volume]",
+    )
+
+    # Consumer parameters
     Consumer_Wellpad = dict(zip(model.df_consumer.Index, model.df_consumer.Wellpad))
     model.p_ConsumerPad = Param(
         model.s_CI,
         within=Any,  # to suppress Pyomo warning
         initialize=Consumer_Wellpad,
         doc="Map consumer wellpad to the entry index",
+    )
+
+    Consumer_WellpadUnique = dict(zip(model.df_consumer.Index, model.df_consumer.WellpadUnique))
+    model.p_ConsumerPadUnique = Param(
+        model.s_CI,
+        within=Any,  # to suppress Pyomo warning
+        initialize=Consumer_WellpadUnique,
+        doc="Map consumer wellpad to the entry index using unique keys",
     )
 
     Consumer_Operator = dict(zip(model.df_consumer.Index, model.df_consumer.Operator))
@@ -394,107 +481,102 @@ def create_model(
         doc="Consumer water demand bid [currency_volume]",
     )
 
-    Consumer_Transport_Bid = dict(
-        zip(model.df_consumer.Index, model.df_consumer["Transport Bid (USD/bbl)"])
+    ConsumerMaxRangeTruck = dict(
+        zip(
+            model.df_consumer.Index,
+            model.df_consumer["Truck Max Dist (mi)"]
+        )
     )
-    model.p_ConsumerTransportBid = Param(
+    model.p_ConsumerMaxRangeTruck = Param(
         model.s_CI,
         within=Any,  # to suppress Pyomo warning
-        initialize=Consumer_Transport_Bid,
-        units=model.model_units["currency_volume-distance"],
-        doc="Consumer water transport bid [currency_volume-distance]",
-    )
-
-    Consumer_Maxdis = dict(
-        zip(model.df_consumer.Index, model.df_consumer["Max Transport (mi)"])
-    )
-    model.p_ConsumerMaxdis = Param(
-        model.s_CI,
-        within=Any,  # to suppress Pyomo warning
-        initialize=Consumer_Maxdis,
+        initialize=ConsumerMaxRangeTruck,
         units=model.model_units["distance"],
-        doc="Maximum consumer trucking distance [distance]",
+        doc="Maximum consumer trucking range [distance]",
     )
 
-    # Midstreams
-    Midstream_Operator = dict(
-        zip(model.df_midstream.Index, model.df_midstream.Operator)
-    )
-    model.p_MidstreamOperator = Param(
-        model.s_MI,
-        within=Any,  # to suppress Pyomo warning
-        initialize=Midstream_Operator,
-        doc="Map midstream operator to the entry index",
-    )
-
-    Midstream_Start = dict(
+    ConsumerTransportCapacityTruck = dict(
         zip(
-            model.df_midstream.Index,
-            pd.Series([model.d_t[date] for date in df_midstream["Start Date"]]),
+            model.df_consumer.Index,
+            model.df_consumer["Trucking Capacity (bpd)"]
         )
     )
-    model.p_MidstreamStart = Param(
-        model.s_MI,
+    model.p_ConsumerTransportCapacityTruck = Param(
+        model.s_CI,
         within=Any,  # to suppress Pyomo warning
-        initialize=Midstream_Start,
-        doc="Midstream entry production start date",
-    )
-
-    Midstream_End = dict(
-        zip(
-            model.df_midstream.Index,
-            pd.Series([model.d_t[date] for date in df_midstream["End Date"]]),
-        )
-    )
-    model.p_MidstreamEnd = Param(
-        model.s_MI,
-        within=Any,  # to suppress Pyomo warning
-        initialize=Midstream_End,
-        doc="Midstream entry production end date",
-    )
-
-    Midstream_Rate = dict(
-        zip(model.df_midstream.Index, model.df_midstream["Total Capacity (bbl)"])
-    )
-    model.p_MidstreamRate = Param(
-        model.s_MI,
-        within=Any,  # to suppress Pyomo warning
-        initialize=Midstream_Rate,
+        initialize=ConsumerTransportCapacityTruck,
         units=model.model_units["volume_time"],
-        doc="Midstream total capacity in bpd [volume/time]",
+        doc="Consumer water trucking capacity [volume_time]",
     )
 
-    Midstream_Bid = dict(
-        zip(model.df_midstream.Index, model.df_midstream["Transport Bid (USD/bbl)"])
+    ConsumerTransportBidTruck = dict(
+        zip(
+            model.df_consumer.Index,
+            model.df_consumer["Truck Transport Bid (USD/bbl)"]
+        )
     )
-    model.p_MidstreamBid = Param(
-        model.s_MI,
+    model.p_ConsumerTransportBidTruck = Param(
+        model.s_CI,
         within=Any,  # to suppress Pyomo warning
-        initialize=Midstream_Bid,
-        units=model.model_units["currency_volume-distance"],
-        doc="Midstream water transport bid [currency_volume-distance]",
+        initialize=ConsumerTransportBidTruck,
+        units=model.model_units["currency_volume"],
+        doc="Consumer water trucking bid [currency_volume]",
     )
 
-    Midstream_Maxdis = dict(
-        zip(model.df_midstream.Index, model.df_midstream["Max Transport (mi)"])
+    ConsumerMaxRangePipel = dict(
+        zip(
+            model.df_consumer.Index,
+            model.df_consumer["Pipe Max Dist (mi)"]
+        )
     )
-    model.p_MidstreamMaxdis = Param(
-        model.s_MI,
+    model.p_ConsumerMaxRangePipel = Param(
+        model.s_CI,
         within=Any,  # to suppress Pyomo warning
-        initialize=Midstream_Maxdis,
+        initialize=ConsumerMaxRangePipel,
         units=model.model_units["distance"],
-        doc="Maximum midstream trucking distance [distance]",
+        doc="Maximum consumer pipeline range [distance]",
     )
 
-    Midstream_Lag = dict(
-        zip(model.df_midstream.Index, model.df_midstream["Lag (days)"])
+    ConsumerTransportCapacityPipel = dict(
+        zip(
+            model.df_consumer.Index,
+            model.df_consumer["Pipeline Capacity (bpd)"]
+        )
     )
-    model.p_MidstreamLag = Param(
-        model.s_MI,
-        within=Any,
-        initialize=Midstream_Lag,
-        units=model.model_units["time"],
-        doc="Midstream delivery lag [time]",
+    model.p_ConsumerTransportCapacityPipel = Param(
+        model.s_CI,
+        within=Any,  # to suppress Pyomo warning
+        initialize=ConsumerTransportCapacityPipel,
+        units=model.model_units["volume_time"],
+        doc="Consumer water pipeline capacity [volume_time]",
+    )
+
+    ConsumerTransportBidPipel = dict(
+        zip(
+            model.df_consumer.Index,
+            model.df_consumer["Pipe Transport Bid (USD/bbl)"]
+        )
+    )
+    model.p_ConsumerTransportBidPipel = Param(
+        model.s_CI,
+        within=Any,  # to suppress Pyomo warning
+        initialize=ConsumerTransportBidPipel,
+        units=model.model_units["currency_volume"],
+        doc="Consumer water pipeline bid [currency_volume]",
+    )
+
+    # Dictionaries mapping unique wellpad entries to corresponding Lat/Lon coordinates
+    model.p_ProducerWellpadLon = GetUniqueDFData(
+        model.df_producer, "Wellpad", "Longitude"
+    )
+    model.p_ProducerWellpadLat = GetUniqueDFData(
+        model.df_producer, "Wellpad", "Latitude"
+    )
+    model.p_ConsumerWellpadLon = GetUniqueDFData(
+        model.df_consumer, "Wellpad", "Longitude"
+    )
+    model.p_ConsumerWellpadLat = GetUniqueDFData(
+        model.df_consumer, "Wellpad", "Latitude"
     )
 
     # Distances
@@ -531,29 +613,10 @@ def create_model(
         doc="arc trucking time [time]",
     )
 
-    # Derived Bound Values
-    max_flow_prod = max(
-        value(model.p_ProducerRate[pi])
-        * (
-            list(model.s_T.ordered_data()).index(model.p_ProducerEnd[pi])
-            - list(model.s_T.ordered_data()).index(model.p_ProducerStart[pi])
-        )
-        for pi in model.s_PI
-    )
-    max_flow_cons = max(
-        value(model.p_ConsumerRate[ci])
-        * (
-            list(model.s_T.ordered_data()).index(model.p_ConsumerEnd[ci])
-            - list(model.s_T.ordered_data()).index(model.p_ConsumerStart[ci])
-        )
-        for ci in model.s_CI
-    )
-    model.FLOWUB = max(max_flow_prod, max_flow_cons)
-
     ### DERIVED SETS AND SUBSETS
     """
     Note: due to a function deprecation, building sets from other sets issues a warning
-    related to the use of unordered data. This can be avoided by using "list(model.s_LLT.ordered_data())"
+    related to the use of unordered data. This can be avoided by using "list(model.s_LTP.ordered_data())"
     which is how Pyomo will work in future versions. Given a specific version of Pyomo is used for PARETO
     development, this means the code will need to be updated if the Pyomo version is updated.
     """
@@ -591,76 +654,196 @@ def create_model(
         ),
         doc="Valid time points for each pi in s_PI",
     )
-    model.s_T_mi = Set(
-        model.s_MI,
-        dimen=1,
-        initialize=dict(
-            (
-                mi,
-                s_t[
-                    model.d_T_ord[Midstream_Start[mi]] : (
-                        model.d_T_ord[Midstream_End[mi]] + 1
-                    )
-                ],
-            )
-            for mi in model.s_MI
-        ),
-        doc="Valid time points for each mi in s_MI",
-    )
 
-    # Create list of elements to initialize set s_LLT
-    L_LLT = []
+    # Set LP(pi,p,c,t) of arcs owned & operated by producers PI
+    L_LP_truck = [] # Create list of elements to initialize set s_LP_truck, comprises indices (pi,pp,cp,t)
+    L_LP_pipel = [] # Create list of elements to initialize set s_LP_pipel, comprises indices (pi,pp,cp,t)
+    # Set LC(ci,p,c,t) of arcs owned & operated by consumers CI
+    L_LC_truck = [] # Create list of elements to initialize set s_LC_truck, comprises indices (ci,pp,cp,t)
+    L_LC_pipel = [] # Create list of elements to initialize set s_LC_pipel, comprises indices (ci,pp,cp,t)
     for pi in list(model.s_PI.ordered_data()):
         for ci in list(model.s_CI.ordered_data()):
+            # LP_truck
             if (
-                model.p_ProducerPad[pi] != model.p_ConsumerPad[ci]
+                model.p_ProducerPadUnique[pi] != model.p_ConsumerPadUnique[ci] # possible edge case
                 and model.p_ArcDistance[
                     Producer_Wellpad[pi], Consumer_Wellpad[ci]
                 ].value
-                <= model.p_ProducerMaxdis[pi].value
+                <= model.p_ProducerMaxRangeTruck[pi].value
             ):
                 for tp in model.s_T_pi[pi]:
                     for tc in model.s_T_ci[ci]:
-                        if tp == tc:
-                            L_LLT.append(
+                        if tp == tc: # i.e., if any times overlap
+                            L_LP_truck.append(
                                 (pi, Producer_Wellpad[pi], Consumer_Wellpad[ci], tp)
                             )
-    L_LLT = list(set(L_LLT))
-    model.s_LLT = Set(dimen=4, initialize=L_LLT, doc="Valid Trucking Arcs")
-
-    # Set for arcs inbound on (cp,t)
-    def s_LP_in_ct_INIT(model, cp, tc):
+            # LP_pipel
+            if (
+                model.p_ProducerPadUnique[pi] != model.p_ConsumerPadUnique[ci] # possible edge case
+                and model.p_ArcDistance[
+                    Producer_Wellpad[pi], Consumer_Wellpad[ci]
+                ].value
+                <= model.p_ProducerMaxRangePipel[pi].value
+            ):
+                for tp in model.s_T_pi[pi]:
+                    for tc in model.s_T_ci[ci]:
+                        if tp == tc: # i.e., if any times overlap
+                            L_LP_pipel.append(
+                                (pi, Producer_Wellpad[pi], Consumer_Wellpad[ci], tp)
+                            )
+            # LC_truck
+            if (
+                model.p_ProducerPadUnique[pi] != model.p_ConsumerPadUnique[ci] # possible edge case
+                and model.p_ArcDistance[
+                    Producer_Wellpad[pi], Consumer_Wellpad[ci]
+                ].value
+                <= model.p_ConsumerMaxRangeTruck[ci].value
+            ):
+                for tp in model.s_T_pi[pi]:
+                    for tc in model.s_T_ci[ci]:
+                        if tp == tc: # i.e., if any times overlap
+                            L_LC_truck.append(
+                                (ci, Producer_Wellpad[pi], Consumer_Wellpad[ci], tc)
+                            )
+            # LC_pipel
+            if (
+                model.p_ProducerPadUnique[pi] != model.p_ConsumerPadUnique[ci] # possible edge case
+                and model.p_ArcDistance[
+                    Producer_Wellpad[pi], Consumer_Wellpad[ci]
+                ].value
+                <= model.p_ConsumerMaxRangePipel[ci].value
+            ):
+                for tp in model.s_T_pi[pi]:
+                    for tc in model.s_T_ci[ci]:
+                        if tp == tc: # i.e., if any times overlap
+                            L_LC_pipel.append(
+                                (ci, Producer_Wellpad[pi], Consumer_Wellpad[ci], tc)
+                            )
+    L_LP_truck = list(set(L_LP_truck)) # remove duplciates
+    L_LP_pipel = list(set(L_LP_pipel)) # remove duplciates
+    L_LC_truck = list(set(L_LC_truck)) # remove duplciates
+    L_LC_pipel = list(set(L_LC_pipel)) # remove duplciates
+    model.s_LP_truck = Set(dimen=4, initialize=L_LP_truck, doc="Valid Producer Trucking Arcs")
+    model.s_LP_pipel = Set(dimen=4, initialize=L_LP_pipel, doc="Valid Producer Pipeline Arcs")
+    model.s_LC_truck = Set(dimen=4, initialize=L_LC_truck, doc="Valid Consumer Trucking Arcs")
+    model.s_LC_pipel = Set(dimen=4, initialize=L_LC_pipel, doc="Valid Consumer Pipeline Arcs")
+    print("Primary arc sets constructed")
+    
+    # Sets for arcs inbound on (cp,t)
+    def s_LP_truck_in_ct_INIT(model, cp, tc):
         elems = []
-        for (pi, p, c, t) in model.s_LLT.ordered_data():
+        for (pi, p, c, t) in model.s_LP_truck.ordered_data():
             if c == cp and t == tc:
                 elems.append((pi, p, c, t))
         return elems
-
-    model.s_LP_in_ct = Set(
+    model.s_LP_truck_in_ct = Set(
         model.s_CP,
         model.s_T,
         dimen=4,
-        initialize=s_LP_in_ct_INIT,
-        doc="Inbound arcs on completions pad cp at time t",
+        initialize=s_LP_truck_in_ct_INIT,
+        doc="Inbound producer trucking arcs on completions pad cp at time t",
     )
-    print("Inbound arc set complete")
 
-    # set for arcs outbound from (pp,t)
-    def s_LP_out_pt_INIT(model, pp, tp):
+    def s_LP_pipel_in_ct_INIT(model, cp, tc):
         elems = []
-        for (pi, p, c, t) in model.s_LLT.ordered_data():
+        for (pi, p, c, t) in model.s_LP_pipel.ordered_data():
+            if c == cp and t == tc:
+                elems.append((pi, p, c, t))
+        return elems
+    model.s_LP_pipel_in_ct = Set(
+        model.s_CP,
+        model.s_T,
+        dimen=4,
+        initialize=s_LP_pipel_in_ct_INIT,
+        doc="Inbound producer pipeline arcs on completions pad cp at time t",
+    )
+
+    def s_LC_truck_in_ct_INIT(model, cp, tc):
+        elems = []
+        for (ci, p, c, t) in model.s_LC_truck.ordered_data():
+            if c == cp and t == tc:
+                elems.append((ci, p, c, t))
+        return elems
+    model.s_LC_truck_in_ct = Set(
+        model.s_CP,
+        model.s_T,
+        dimen=4,
+        initialize=s_LC_truck_in_ct_INIT,
+        doc="Inbound consumer trucking arcs on completions pad cp at time t",
+    )
+
+    def s_LC_pipel_in_ct_INIT(model, cp, tc):
+        elems = []
+        for (ci, p, c, t) in model.s_LC_pipel.ordered_data():
+            if c == cp and t == tc:
+                elems.append((ci, p, c, t))
+        return elems
+    model.s_LC_pipel_in_ct = Set(
+        model.s_CP,
+        model.s_T,
+        dimen=4,
+        initialize=s_LC_pipel_in_ct_INIT,
+        doc="Inbound consumer pipeline arcs on completions pad cp at time t",
+    )
+    print("Inbound arc sets complete")
+
+    # Sets for arcs outbound from (pp,t)
+    def s_LP_truck_out_pt_INIT(model, pp, tp):
+        elems = []
+        for (pi, p, c, t) in model.s_LP_truck.ordered_data():
             if p == pp and t == tp:
                 elems.append((pi, p, c, t))
         return elems
-
-    model.s_LP_out_pt = Set(
+    model.s_LP_truck_out_pt = Set(
         model.s_PP,
         model.s_T,
         dimen=4,
-        initialize=s_LP_out_pt_INIT,
-        doc="Outbound arcs from production pad pp at time t",
+        initialize=s_LP_truck_out_pt_INIT,
+        doc="Outbound producer trucking arcs from production pad pp at time t",
     )
-    print("Outbound arc set complete")
+
+    def s_LP_pipel_out_pt_INIT(model, pp, tp):
+        elems = []
+        for (pi, p, c, t) in model.s_LP_pipel.ordered_data():
+            if p == pp and t == tp:
+                elems.append((pi, p, c, t))
+        return elems
+    model.s_LP_pipel_out_pt = Set(
+        model.s_PP,
+        model.s_T,
+        dimen=4,
+        initialize=s_LP_pipel_out_pt_INIT,
+        doc="Outbound producer pipeline arcs from production pad pp at time t",
+    )
+
+    def s_LC_truck_out_pt_INIT(model, pp, tp):
+        elems = []
+        for (ci, p, c, t) in model.s_LC_truck.ordered_data():
+            if p == pp and t == tp:
+                elems.append((ci, p, c, t))
+        return elems
+    model.s_LC_truck_out_pt = Set(
+        model.s_PP,
+        model.s_T,
+        dimen=4,
+        initialize=s_LC_truck_out_pt_INIT,
+        doc="Outbound consumer trucking arcs from production pad pp at time t",
+    )
+
+    def s_LC_pipel_out_pt_INIT(model, pp, tp):
+        elems = []
+        for (ci, p, c, t) in model.s_LC_pipel.ordered_data():
+            if p == pp and t == tp:
+                elems.append((ci, p, c, t))
+        return elems
+    model.s_LC_pipel_out_pt = Set(
+        model.s_PP,
+        model.s_T,
+        dimen=4,
+        initialize=s_LC_pipel_out_pt_INIT,
+        doc="Outbound consumer pipeline arcs from production pad pp at time t",
+    )
+    print("Outbound arc sets complete")
 
     # set for producer-node mapping
     def ProducerNodeMapINIT(model, p):
@@ -669,7 +852,6 @@ def create_model(
             if Producer_Wellpad[pi] == p:
                 pies.append(pi)
         return pies
-
     model.ProducerNodeMap = Set(
         model.s_PP,
         dimen=1,
@@ -681,7 +863,7 @@ def create_model(
     def ProducerNodeTimeMapINIT(model, p, t):
         peties = []
         for pi in model.s_PI:
-            if Producer_Wellpad[pi] == p and t in model.s_T_pi[pi]:
+            if model.p_ProducerPadUnique[pi] == p and t in model.s_T_pi[pi]:
                 peties.append(pi)
         return peties
 
@@ -724,138 +906,41 @@ def create_model(
         doc="Mapping from consumer node c in s_CP active at time t in s_T to ci in s_CI (one-to-many)",
     )
 
-    # set yielding active midstreams by time point
-    def MidstreamTimeMapINIT(model, t):
-        mies = []
-        for mi in model.s_MI:
-            if t in model.s_T_mi[mi]:
-                mies.append(mi)
-        return mies
-
-    model.MidstreamTimeMap = Set(
-        model.s_T,
-        dimen=1,
-        initialize=MidstreamTimeMapINIT,
-        doc="All midstreams active at time t in s_T (one-to-many)",
-    )
-
-    print("Starting midstream arc set")
-    #[NOTE: tag this section for removal]
-    # set yielding valid time lags for each midstream mi from each start point tp
-    def LLM_INIT(model):
-        LLMs = []
-        for pi in list(model.s_PI.ordered_data()):
-            for ci in list(model.s_CI.ordered_data()):
-                for mi in list(model.s_MI.ordered_data()):
-                    p = model.p_ProducerPad[pi]
-                    c = model.p_ConsumerPad[ci]
-                    if p != c:
-                        for tp in model.s_T_pi[pi]:
-                            for tc in model.s_T_ci[ci]:
-                                if (
-                                    bool(model.MidstreamTimeMap[tp])
-                                    and bool(model.ProducerNodeTimeMap[p, tp])
-                                    and bool(model.ConsumerNodeTimeMap[c, tc])
-                                ):
-                                    if (
-                                        model.d_T_ord[tc] - model.d_T_ord[tp] >= 0
-                                        and model.d_T_ord[tc] - model.d_T_ord[tp]
-                                        <= model.p_MidstreamLag[mi].value
-                                        and model.p_ArcDistance[p, c].value
-                                        <= model.p_MidstreamMaxdis[mi].value
-                                    ):
-                                        LLMs.append((mi, p, c, tp, tc))
-        """
-        # Works, but slow and inefficient
-        for (mi,p,c,tp,tc) in model.s_MI*model.s_PP*model.s_CP*model.s_T*model.s_T:
-            if bool(model.MidstreamTimeMap[tp]) and bool(model.ProducerNodeTimeMap[p,tp]) and bool(model.ConsumerNodeTimeMap[c,tc]):
-                if model.d_T_ord[tc] - model.d_T_ord[tp] <= model.p_MidstreamLag[mi].value:
-                    LLMs.append((mi,p,c,tp,tc))
-                else: Set.Skip
-            else:
-                Set.Skip
-        """
-        s_LLM = set(LLMs)
-        return s_LLM
-
-    model.s_LLM = Set(
-        within=model.s_MI * model.s_PP * model.s_CP * model.s_T * model.s_T,
-        dimen=5,
-        initialize=LLM_INIT,
-        doc="Valid midstream transportation arcs",
-    )
-    print("Midstream arc set complete")
-
-    # Set for arcs inbound on (cp,t)
-    def s_LM_in_ct_INIT(model, c_prime, t_prime):
-        elems = []
-        for (mi, p, c, tp, tc) in model.s_LLM.ordered_data():
-            if c == c_prime and tc == t_prime:
-                elems.append((mi, p, c, tp, tc))
-        # elems = [(mi,p,c,tp,tc) in model.s_LLM if c == c_prime and tc == t_prime]
-        return elems
-
-    model.s_LM_in_ct = Set(
-        model.s_CP,
-        model.s_T,
-        dimen=5,
-        initialize=s_LM_in_ct_INIT,
-        doc="Inbound midstream arcs on completions pad cp at time t",
-    )
-    print("Inbound arc set complete")
-
-    # set for arcs outbound from (pp,t)
-    def s_LM_out_pt_INIT(model, p_prime, t_prime):
-        elems = []
-        for (mi, p, c, tp, tc) in model.s_LLM:
-            if p == p_prime and tp == t_prime:
-                elems.append((mi, p, c, tp, tc))
-        # elems = [(mi,p,c,tp,tc) in model.s_LLM if p == p_prime and tp == t_prime]
-        return elems
-
-    model.s_LM_out_pt = Set(
-        model.s_PP,
-        model.s_T,
-        dimen=5,
-        initialize=s_LM_out_pt_INIT,
-        doc="Outbound arcs from production pad pp at time t",
-    )
-    print("Outbound arc set complete")
-
-    # set for all outbound arcs at time tp
-    def s_LM_out_mit_INIT(model, mi_prime, t_prime):
-        elems = []
-        for (mi, p, c, tp, tc) in model.s_LLM:
-            if mi == mi_prime and tp == t_prime:
-                elems.append((mi, p, c, tp, tc))
-        return elems
-
-    model.s_LM_out_mit = Set(
-        model.s_MI,
-        model.s_T,
-        within=model.s_LLM,
-        initialize=s_LM_out_mit_INIT,
-        doc="Outbound arcs from all pads pp at t for mi",
-    )
-
     # All sets done
     print("All sets complete")
 
     ### ---------------------- VARIABLES & BOUNDS ---------------------- #
-    model.v_FP_Trucked = Var(
-        model.s_LLT,
+    # Variables for water volumes; note: the F in v_F indicates transport (flow) volume, v_FP_truck indicates producer trucking (i.e., v_(node_i,node_j,producer_index)) while v_FC_pipel indicates consumer piping (i.e., v_(node_i,node_j,consumer_index)) 
+    model.v_FP_truck = Var(
+        model.s_LP_truck,
         within=NonNegativeReals,
         initialize=0,
         units=model.model_units["volume_time"],
         doc="Produced water quantity trucked from location l to location l' [volume/time] by producer pi",
     )
 
-    model.v_FM_Trucked = Var(
-        model.s_LLM,
+    model.v_FP_pipel = Var(
+        model.s_LP_pipel,
         within=NonNegativeReals,
         initialize=0,
         units=model.model_units["volume_time"],
-        doc="Produced water quantity trucked from location l to location l' [volume/time] by midstream mi",
+        doc="Produced water quantity piped from location l to location l' [volume/time] by producer pi",
+    )
+
+    model.v_FC_truck = Var(
+        model.s_LC_truck,
+        within=NonNegativeReals,
+        initialize=0,
+        units=model.model_units["volume_time"],
+        doc="Produced water quantity trucked from location l to location l' [volume/time] by consumer ci",
+    )
+
+    model.v_FC_pipel = Var(
+        model.s_LC_pipel,
+        within=NonNegativeReals,
+        initialize=0,
+        units=model.model_units["volume_time"],
+        doc="Produced water quantity piped from location l to location l' [volume/time] by consumer ci",
     )
 
     model.v_Supply = Var(
@@ -878,30 +963,85 @@ def create_model(
     print("All variables set up")
 
     ### Variable Bounds
-    # update for new arc indexing:
-    def p_FP_Trucked_UB_init(model, pi, p, c, t):
+    # Producer trucking bound
+    def p_FP_truck_UB_init(model, pi, p, c, t):
         if tp in model.s_T_pi[pi]:
-            return model.p_ProducerRate[pi]
+            return model.p_ProducerTransportCapacityTruck[pi]
         else:
             return 0
 
-    model.p_FP_Trucked_UB = Param(
-        model.s_LLT,
+    model.p_FP_truck_UB = Param(
+        model.s_LP_truck,
         within=Any,
         default=None,
         mutable=True,
-        initialize=p_FP_Trucked_UB_init,
+        initialize=p_FP_truck_UB_init,
         units=model.model_units["volume_time"],
-        doc="Maximum trucking capacity between nodes [volume_time]",
+        doc="Maximum producer trucking capacity between nodes [volume_time]",
     )
 
-    # Producer transport bound
-    for (pi, p, c, t) in model.s_LLT:
-        model.v_FP_Trucked[pi, p, c, t].setub(model.p_FP_Trucked_UB[pi, p, c, t])
+    for (pi, p, c, t) in model.s_LP_truck:
+        model.v_FP_truck[pi, p, c, t].setub(model.p_FP_truck_UB[pi, p, c, t])
 
-    # Midstream transport bound
-    for (mi, p, c, tp, tc) in model.s_LLM:
-        model.v_FM_Trucked[mi, p, c, tp, tc].setub(model.p_MidstreamRate[mi])
+    # Producer piping bound
+    def p_FP_pipel_UB_init(model, pi, p, c, t):
+        if tp in model.s_T_pi[pi]:
+            return model.p_ProducerTransportCapacityPipel[pi]
+        else:
+            return 0
+
+    model.p_FP_pipel_UB = Param(
+        model.s_LP_pipel,
+        within=Any,
+        default=None,
+        mutable=True,
+        initialize=p_FP_pipel_UB_init,
+        units=model.model_units["volume_time"],
+        doc="Maximum producer piping capacity between nodes [volume_time]",
+    )
+
+    for (pi, p, c, t) in model.s_LP_pipel:
+        model.v_FP_pipel[pi, p, c, t].setub(model.p_FP_pipel_UB[pi, p, c, t])
+
+    # Consumer trucking bound
+    def p_FC_truck_UB_init(model, ci, p, c, t):
+        if tc in model.s_T_ci[ci]:
+            return model.p_ConsumerTransportCapacityTruck[ci]
+        else:
+            return 0
+
+    model.p_FC_truck_UB = Param(
+        model.s_LC_truck,
+        within=Any,
+        default=None,
+        mutable=True,
+        initialize=p_FC_truck_UB_init,
+        units=model.model_units["volume_time"],
+        doc="Maximum consumer trucking capacity between nodes [volume_time]",
+    )
+
+    for (ci, p, c, t) in model.s_LC_truck:
+        model.v_FC_truck[ci, p, c, t].setub(model.p_FC_truck_UB[ci, p, c, t])
+
+    # Consumer piping bound
+    def p_FC_pipel_UB_init(model, ci, p, c, t):
+        if tc in model.s_T_ci[ci]:
+            return model.p_ConsumerTransportCapacityPipel[pi]
+        else:
+            return 0
+
+    model.p_FC_pipel_UB = Param(
+        model.s_LC_pipel,
+        within=Any,
+        default=None,
+        mutable=True,
+        initialize=p_FC_pipel_UB_init,
+        units=model.model_units["volume_time"],
+        doc="Maximum consumer piping capacity between nodes [volume_time]",
+    )
+
+    for (ci, p, c, t) in model.s_LC_pipel:
+        model.v_FC_pipel[ci, p, c, t].setub(model.p_FC_pipel_UB[ci, p, c, t])
 
     # Supply bound
     for pi in model.s_PI:
@@ -927,45 +1067,21 @@ def create_model(
     # demand balance
     def ConsumerDemandBalanceRule(model, c, t):
         if bool(model.ConsumerNodeTimeMap[c, t]):
-            if bool(model.s_LM_in_ct[c, t]) and bool(model.s_LP_in_ct[c, t]):
-                return (
-                    sum(
-                        model.v_FP_Trucked[pi, pa, ca, t]
-                        for (pi, pa, ca, t) in model.s_LP_in_ct[c, t]
-                    )
-                    + sum(
-                        model.v_FM_Trucked[mi, p, ca, tp, tc]
-                        for (mi, p, ca, tp, tc) in model.s_LM_in_ct[c, t]
-                    )
-                    - sum(
-                        model.v_Demand[ci, t] for ci in model.ConsumerNodeTimeMap[c, t]
-                    )
-                    == 0
-                )
-            elif bool(model.s_LP_in_ct[c, t]):
-                return (
-                    sum(
-                        model.v_FP_Trucked[pi, pa, ca, t]
-                        for (pi, pa, ca, t) in model.s_LP_in_ct[c, t]
-                    )
-                    - sum(
-                        model.v_Demand[ci, t] for ci in model.ConsumerNodeTimeMap[c, t]
-                    )
-                    == 0
-                )
-            elif bool(model.s_LM_in_ct[c, t]):
-                return (
-                    sum(
-                        model.v_FM_Trucked[mi, pa, ca, tp, tc]
-                        for (mi, pa, ca, tp, tc) in model.s_LM_in_ct[c, t]
-                    )
-                    - sum(
-                        model.v_Demand[ci, t] for ci in model.ConsumerNodeTimeMap[c, t]
-                    )
-                    == 0
-                )
-            else:
-                return Constraint.Skip
+            expr = -sum(model.v_Demand[ci, t] for ci in model.ConsumerNodeTimeMap[c, t])
+
+            if bool(model.s_LP_truck_in_ct[c, t]):
+                expr += sum(model.v_FP_truck[pi, pa, ca, t] for (pi, pa, ca, t) in model.s_LP_truck_in_ct[c, t])
+
+            if bool(model.s_LP_pipel_in_ct[c, t]):
+                expr += sum(model.v_FP_pipel[pi, pa, ca, t] for (pi, pa, ca, t) in model.s_LP_pipel_in_ct[c, t])
+
+            if bool(model.s_LC_truck_in_ct[c, t]):
+                expr += sum(model.v_FC_truck[ci, pa, ca, t] for (ci, pa, ca, t) in model.s_LC_truck_in_ct[c, t])
+
+            if bool(model.s_LC_pipel_in_ct[c, t]):
+                expr += sum(model.v_FC_pipel[ci, pa, ca, t] for (ci, pa, ca, t) in model.s_LC_pipel_in_ct[c, t])
+
+            return expr == 0
         else:
             return Constraint.Skip
 
@@ -979,39 +1095,21 @@ def create_model(
     # supply balance
     def ProducerSupplyBalanceRule(model, p, t):
         if bool(model.ProducerNodeTimeMap[p, t]):
-            if bool(model.s_LM_out_pt[p, t]) and bool(model.s_LP_out_pt[p, t]):
-                return (
-                    sum(model.v_Supply[pi, t] for pi in model.ProducerNodeTimeMap[p, t])
-                    - sum(
-                        model.v_FP_Trucked[pi, pa, ca, t]
-                        for (pi, pa, ca, t) in model.s_LP_out_pt[p, t]
-                    )
-                    - sum(
-                        model.v_FM_Trucked[mi, pa, ca, tp, tc]
-                        for (mi, pa, ca, tp, tc) in model.s_LM_out_pt[p, t]
-                    )
-                    == 0
-                )
-            elif bool(model.s_LP_out_pt[p, t]):
-                return (
-                    sum(model.v_Supply[pi, t] for pi in model.ProducerNodeTimeMap[p, t])
-                    - sum(
-                        model.v_FP_Trucked[pi, pa, ca, t]
-                        for (pi, pa, ca, t) in model.s_LP_out_pt[p, t]
-                    )
-                    == 0
-                )
-            elif bool(model.s_LM_out_pt[p, t]):
-                return (
-                    sum(model.v_Supply[pi, t] for pi in model.ProducerNodeTimeMap[p, t])
-                    - sum(
-                        model.v_FM_Trucked[mi, pa, c, tp, tc]
-                        for (mi, pa, c, tp, tc) in model.s_LM_out_pt[p, t]
-                    )
-                    == 0
-                )
-            else:
-                return Constraint.Skip
+            expr = sum(model.v_Supply[pi, t] for pi in model.ProducerNodeTimeMap[p, t])
+
+            if bool(model.s_LP_truck_out_pt[p, t]):
+                expr += -sum(model.v_FP_truck[pi, pa, ca, t] for (pi, pa, ca, t) in model.s_LP_truck_out_pt[p, t])
+
+            if bool(model.s_LP_pipel_out_pt[p, t]):
+                expr += -sum(model.v_FP_pipel[pi, pa, ca, t] for (pi, pa, ca, t) in model.s_LP_pipel_out_pt[p, t])
+
+            if bool(model.s_LC_truck_out_pt[p, t]):
+                expr += -sum(model.v_FC_truck[ci, pa, ca, t] for (ci, pa, ca, t) in model.s_LC_truck_out_pt[p, t])
+
+            if bool(model.s_LC_pipel_out_pt[p, t]):
+                expr += -sum(model.v_FC_pipel[ci, pa, ca, t] for (ci, pa, ca, t) in model.s_LC_pipel_out_pt[p, t])
+
+            return expr == 0
         else:
             return Constraint.Skip
 
@@ -1044,56 +1142,66 @@ def create_model(
         model.s_CI, model.s_T, rule=ConsumerDemandMaxINIT, doc="Producer Supply Maximum"
     )
 
-    # midstream individual constraints
-    def MidstreamRouteMaxINIT(model, mi, p, c, tp, tc):
-        if (mi, p, c, tp, tc) in model.s_LLM:
-            return model.v_FM_Trucked[mi, p, c, tp, tc] <= model.p_MidstreamRate[mi]
-        else:
-            return Constraint.Skip
-
-    model.MidstreamRouteMax = Constraint(
-        model.s_MI,
-        model.s_PP,
-        model.s_CP,
-        model.s_T,
-        model.s_T,
-        rule=MidstreamRouteMaxINIT,
-        doc="Midstream transport route maximum",
-    )
-
-    def MidstreamTotalMaxINIT(model, mi_prime, tp_prime):
-        if tp_prime in model.s_T_mi[mi]:
-            return (
-                sum(
-                    model.v_FM_Trucked[mi, p, c, tp, tc]
-                    for (mi, p, c, tp, tc) in model.s_LM_out_mit[mi_prime, tp_prime]
-                )
-                <= model.p_MidstreamRate[mi_prime]
-            )
-        else:
-            return Constraint.Skip
-
-    model.MidstreamTotalMax = Constraint(
-        model.s_MI,
-        model.s_T,
-        rule=MidstreamTotalMaxINIT,
-        doc="Midstream transport total maximum",
-    )
-
     # producer transport constraints
-    def ProducerTransportMaxINIT(model, pi, p, c, t):
-        if (pi, p, c, t) in model.s_LLT:
-            return model.v_FP_Trucked[pi, p, c, t] <= model.p_FP_Trucked_UB[pi, p, c, t]
+    def ProducerTruckingMaxINIT(model, pi, p, c, t):
+        if (pi, p, c, t) in model.s_LP_truck:
+            return model.v_FP_truck[pi, p, c, t] <= model.p_FP_truck_UB[pi, p, c, t]
         else:
             return Constraint.Skip
 
-    model.ProducerTransportMax = Constraint(
+    model.ProducerTruckingMax = Constraint(
         model.s_PI,
         model.s_PP,
         model.s_CP,
         model.s_T,
-        rule=ProducerTransportMaxINIT,
-        doc="Producer transport maximum",
+        rule=ProducerTruckingMaxINIT,
+        doc="Producer trucking maximum",
+    )
+
+    def ProducerPipingMaxINIT(model, pi, p, c, t):
+        if (pi, p, c, t) in model.s_LP_pipel:
+            return model.v_FP_pipel[pi, p, c, t] <= model.p_FP_pipel_UB[pi, p, c, t]
+        else:
+            return Constraint.Skip
+
+    model.ProducerPipingMax = Constraint(
+        model.s_PI,
+        model.s_PP,
+        model.s_CP,
+        model.s_T,
+        rule=ProducerPipingMaxINIT,
+        doc="Producer piping maximum",
+    )
+
+    # consumer transport constraints
+    def ConsumerTruckingMaxINIT(model, ci, p, c, t):
+        if (ci, p, c, t) in model.s_LC_truck:
+            return model.v_FC_truck[ci, p, c, t] <= model.p_FC_truck_UB[ci, p, c, t]
+        else:
+            return Constraint.Skip
+
+    model.ConsumerTruckingMax = Constraint(
+        model.s_CI,
+        model.s_PP,
+        model.s_CP,
+        model.s_T,
+        rule=ConsumerTruckingMaxINIT,
+        doc="Consumer trucking maximum",
+    )
+
+    def ConsumerPipingMaxINIT(model, ci, p, c, t):
+        if (ci, p, c, t) in model.s_LC_pipel:
+            return model.v_FC_pipel[ci, p, c, t] <= model.p_FC_pipel_UB[ci, p, c, t]
+        else:
+            return Constraint.Skip
+
+    model.ConsumerPipingMax = Constraint(
+        model.s_CI,
+        model.s_PP,
+        model.s_CP,
+        model.s_T,
+        rule=ConsumerPipingMaxINIT,
+        doc="Consumer piping maximum",
     )
 
     # -------------------- Define objectives ----------------------
@@ -1111,12 +1219,20 @@ def create_model(
             for t in model.s_T_pi[pi]
         )
         - sum(
-            model.p_ProducerTransportBid[pi] * model.v_FP_Trucked[pi, p, c, t]
-            for (pi, p, c, t) in model.s_LLT
+            model.p_ProducerTransportBidTruck[pi] * model.v_FP_truck[pi, p, c, t]
+            for (pi, p, c, t) in model.s_LP_truck
         )
         - sum(
-            model.p_MidstreamBid[mi] * model.v_FM_Trucked[mi, p, c, tp, tc]
-            for (mi, p, c, tp, tc) in model.s_LLM
+            model.p_ProducerTransportBidPipel[pi] * model.v_FP_pipel[pi, p, c, t]
+            for (pi, p, c, t) in model.s_LP_pipel
+        )
+        - sum(
+            model.p_ConsumerTransportBidTruck[ci] * model.v_FC_truck[ci, p, c, t]
+            for (ci, p, c, t) in model.s_LC_truck
+        )
+        - sum(
+            model.p_ConsumerTransportBidPipel[ci] * model.v_FC_pipel[ci, p, c, t]
+            for (ci, p, c, t) in model.s_LC_pipel
         )
     )
 
@@ -1137,10 +1253,10 @@ def jsonize_outputs(model, matches_dir):
             "To wellpad": key[2],
             "Date Index": key[3],
             "Date": model.d_T[key[3]],
-            "Rate": value(model.v_FP_Trucked[key]),
+            "Rate": value(model.v_FP_truck[key]),
         }
-        for key in model.v_FP_Trucked
-        if value(model.v_FP_Trucked[key]) > 0.01
+        for key in model.v_FP_truck
+        if value(model.v_FP_truck[key]) > 0.01
     )
     df_vP_Truck["Distance"] = add_dataframe_distance(df_vP_Truck, model.df_distance)
     #'To index': key[1],
@@ -1250,7 +1366,7 @@ def jsonize_outputs(model, matches_dir):
     df_v_Demand = pd.DataFrame(
         {
             "Consumer Index": key[0],
-            "Consumer Wellpad": model.p_ConsumerPad[key[0]],
+            "Consumer Wellpad": model.p_ConsumerPadUnique[key[0]],
             "Date Index": key[1],
             "Date": model.d_T[key[1]],
             "Rate": value(model.v_Demand[key]),
@@ -1419,7 +1535,7 @@ def PostSolve(model):
 
     # Supplier Profit
     def ProducerProfitINIT(model, pi):
-        p = model.p_ProducerPad[pi]
+        p = model.p_ProducerPadUnique[pi]
         try:
             return sum(
                 (
@@ -1442,7 +1558,7 @@ def PostSolve(model):
 
     # Consumer Profit
     def ConsumerProfitINIT(model, ci):
-        c = model.p_ConsumerPad[ci]
+        c = model.p_ConsumerPadUnique[ci]
         try:
             return sum(
                 (
@@ -1511,9 +1627,9 @@ def PostSolve(model):
             if t in model.s_T_pi[pi]:
                 return (
                     model.p_TransportPrice[p, c, t, t].value
-                    - model.p_ProducerTransportBid[pi].value
-                ) * model.v_FP_Trucked[pi, p, c, t].value
-                # return (model.p_TransportPrice[p,c,t,t].value - model.p_ProducerTransportBid[pi].value*model.p_ArcDistance[p,c].value)*model.v_FP_Trucked[pi,p,c,t].value
+                    - model.p_ProducerTransportBidTruck[pi].value
+                ) * model.v_FP_truck[pi, p, c, t].value
+                # return (model.p_TransportPrice[p,c,t,t].value - model.p_ProducerTransportBidTruck[pi].value*model.p_ArcDistance[p,c].value)*model.v_FP_truck[pi,p,c,t].value
             else:
                 return 0
         except:
@@ -1534,7 +1650,7 @@ def PostSolve(model):
     def ProducerTotalProfitINIT(model, pi):
         return sum(
             model.p_ProducerRouteProfit[pii, p, c, t]
-            for (pii, p, c, t) in model.s_LLT
+            for (pii, p, c, t) in model.s_LP_truck
             if pii == pi
         )
 
@@ -1576,7 +1692,7 @@ def DataViews(model, save_dir):
     # Producer transport arcs
     fo.write("\n" + PrintSpacer)
     fo.write("\nProducer Transportation Arcs")
-    for (pi, p, c, t) in model.s_LLT:
+    for (pi, p, c, t) in model.s_LP_truck:
         fo.write("\n" + ",".join((pi, p, c, t)))
 
     # Midstream transport arcs
@@ -1644,7 +1760,7 @@ def PostSolveViews(model, save_dir):
     # Producer per-route Profits
     fo.write("\n" + PrintSpacer)
     fo.write("\nProducer Transportation Profits (per-route) [currency]")
-    for (pi, p, c, t) in model.s_LLT:
+    for (pi, p, c, t) in model.s_LP_truck:
         fo.write(
             "\n"
             + ",".join((pi, p, c, t))
@@ -1684,26 +1800,15 @@ def PostSolveViews(model, save_dir):
                 + str(model.v_Demand[ci, t].value)
             )
 
-    # Midstream variable value
-    fo.write("\n" + PrintSpacer)
-    fo.write("\nMidstream Transport Allocations [volume]")
-    for (mi, p, c, tp, tc) in model.s_LLM:
-        fo.write(
-            "\n"
-            + ",".join((mi, p, c, tp, tc))
-            + ": "
-            + str(model.v_FM_Trucked[mi, p, c, tp, tc].value)
-        )
-
     # Producer transport variable value
     fo.write("\n" + PrintSpacer)
     fo.write("\nProducer Transport Allocations [volume]")
-    for (pi, p, c, t) in model.s_LLT:
+    for (pi, p, c, t) in model.s_LP_truck:
         fo.write(
             "\n"
             + ",".join((pi, p, c, t))
             + ": "
-            + str(model.v_FP_Trucked[pi, p, c, t].value)
+            + str(model.v_FP_truck[pi, p, c, t].value)
         )
 
     # Producer nodal prices
@@ -1738,7 +1843,7 @@ def PostSolveViews(model, save_dir):
 
 
 # filter requests by date
-def FilterRequests(df_producer, df_consumer, df_midstream, filter_by_date):
+def FilterRequests(df_producer, df_consumer, filter_by_date):
     # Filter by date here
     df_producer = df_producer.loc[
         (df_producer["Start Date"] == filter_by_date)
@@ -1748,8 +1853,4 @@ def FilterRequests(df_producer, df_consumer, df_midstream, filter_by_date):
         (df_consumer["Start Date"] == filter_by_date)
         & (df_consumer["End Date"] == filter_by_date)
     ]
-    df_midstream = df_midstream.loc[
-        (df_midstream["Start Date"] == filter_by_date)
-        & (df_midstream["End Date"] == filter_by_date)
-    ]
-    return df_producer, df_consumer, df_midstream
+    return df_producer, df_consumer
