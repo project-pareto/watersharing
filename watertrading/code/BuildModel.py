@@ -33,6 +33,7 @@ from Utilities import (
 
 ##################################################
 # CREATE CONFIG DICTIONARY
+# NOTE: Currently unsued, other than assigned modl type; remove in future?
 CONFIG = ConfigBlock()
 CONFIG.declare(
     "has_pipeline_constraints",
@@ -75,7 +76,7 @@ def get_data(
     > request_dir - directory to _requests.json file
     > distance_dir - directory to _distance.json file
     > update_distance_matrix - optional kwarg; if true, creates a distance matrix, if false, assumes the distance matrix exists and is CORRECT
-    > filter_by_date - date by which to filter data; if None, all dates are processed
+    > filter_by_date - date by which to filter data; if None, all dates are processed; default: None
     Outputs:
     > df_producer - producer request dataframe
     > df_consumer - consumer request dataframe
@@ -257,6 +258,15 @@ def create_model(
         doc="Map producer wellpad to the entry index using unique keys",
     )
 
+    # Add a reverse-lookup to the model; just to simplify finding the original name
+    Producer_WellMap = dict(zip(model.df_producer.WellpadUnique, model.df_producer.Wellpad))
+    model.p_ProducerWellMap = Param(
+        model.s_PPUnique,
+        within=Any,  # to suppress Pyomo warning
+        initialize=Producer_WellMap,
+        doc="Reverse-lookup from wellpad unique ID to original name",
+    )
+
     Producer_Operator = dict(
         zip(
             model.df_producer.Index,
@@ -425,6 +435,15 @@ def create_model(
         doc="Map consumer wellpad to the entry index using unique keys",
     )
 
+    # Add a reverse-lookup to the model; just to simplify finding the original name
+    Consumer_WellMap = dict(zip(model.df_consumer.WellpadUnique, model.df_consumer.Wellpad))
+    model.p_ConsumerWellMap = Param(
+        model.s_CPUnique,
+        within=Any,  # to suppress Pyomo warning
+        initialize=Consumer_WellMap,
+        doc="Reverse-lookup from wellpad unique ID to original name",
+    )
+
     Consumer_Operator = dict(zip(model.df_consumer.Index, model.df_consumer.Operator))
     model.p_ConsumerOperator = Param(
         model.s_CI,
@@ -588,8 +607,8 @@ def create_model(
 
     # Parameter definition
     model.p_ArcDistance = Param(
-        model.s_PP,
-        model.s_CP,
+        model.s_PPUnique,
+        model.s_CPUnique,
         within=NonNegativeReals,  # to suppress Pyomo warning
         initialize=Arc_Distance,
         units=model.model_units["distance"],
@@ -605,8 +624,8 @@ def create_model(
 
     # Parameter definition
     model.p_ArcTime = Param(
-        model.s_PP,
-        model.s_CP,
+        model.s_PPUnique,
+        model.s_CPUnique,
         within=NonNegativeReals,  # to suppress Pyomo warning
         initialize=Arc_Time,
         units=model.model_units["time"],
@@ -667,7 +686,7 @@ def create_model(
             if (
                 model.p_ProducerPadUnique[pi] != model.p_ConsumerPadUnique[ci] # possible edge case
                 and model.p_ArcDistance[
-                    Producer_Wellpad[pi], Consumer_Wellpad[ci]
+                    Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
                 <= model.p_ProducerMaxRangeTruck[pi].value
             ):
@@ -675,13 +694,13 @@ def create_model(
                     for tc in model.s_T_ci[ci]:
                         if tp == tc: # i.e., if any times overlap
                             L_LP_truck.append(
-                                (pi, Producer_Wellpad[pi], Consumer_Wellpad[ci], tp)
+                                (pi, Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci], tp)
                             )
             # LP_pipel
             if (
                 model.p_ProducerPadUnique[pi] != model.p_ConsumerPadUnique[ci] # possible edge case
                 and model.p_ArcDistance[
-                    Producer_Wellpad[pi], Consumer_Wellpad[ci]
+                    Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
                 <= model.p_ProducerMaxRangePipel[pi].value
             ):
@@ -689,13 +708,13 @@ def create_model(
                     for tc in model.s_T_ci[ci]:
                         if tp == tc: # i.e., if any times overlap
                             L_LP_pipel.append(
-                                (pi, Producer_Wellpad[pi], Consumer_Wellpad[ci], tp)
+                                (pi, Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci], tp)
                             )
             # LC_truck
             if (
                 model.p_ProducerPadUnique[pi] != model.p_ConsumerPadUnique[ci] # possible edge case
                 and model.p_ArcDistance[
-                    Producer_Wellpad[pi], Consumer_Wellpad[ci]
+                    Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
                 <= model.p_ConsumerMaxRangeTruck[ci].value
             ):
@@ -703,13 +722,13 @@ def create_model(
                     for tc in model.s_T_ci[ci]:
                         if tp == tc: # i.e., if any times overlap
                             L_LC_truck.append(
-                                (ci, Producer_Wellpad[pi], Consumer_Wellpad[ci], tc)
+                                (ci, Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci], tc)
                             )
             # LC_pipel
             if (
                 model.p_ProducerPadUnique[pi] != model.p_ConsumerPadUnique[ci] # possible edge case
                 and model.p_ArcDistance[
-                    Producer_Wellpad[pi], Consumer_Wellpad[ci]
+                    Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
                 <= model.p_ConsumerMaxRangePipel[ci].value
             ):
@@ -717,7 +736,7 @@ def create_model(
                     for tc in model.s_T_ci[ci]:
                         if tp == tc: # i.e., if any times overlap
                             L_LC_pipel.append(
-                                (ci, Producer_Wellpad[pi], Consumer_Wellpad[ci], tc)
+                                (ci, Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci], tc)
                             )
     L_LP_truck = list(set(L_LP_truck)) # remove duplciates
     L_LP_pipel = list(set(L_LP_pipel)) # remove duplciates
@@ -737,7 +756,7 @@ def create_model(
                 elems.append((pi, p, c, t))
         return elems
     model.s_LP_truck_in_ct = Set(
-        model.s_CP,
+        model.s_CPUnique,
         model.s_T,
         dimen=4,
         initialize=s_LP_truck_in_ct_INIT,
@@ -751,7 +770,7 @@ def create_model(
                 elems.append((pi, p, c, t))
         return elems
     model.s_LP_pipel_in_ct = Set(
-        model.s_CP,
+        model.s_CPUnique,
         model.s_T,
         dimen=4,
         initialize=s_LP_pipel_in_ct_INIT,
@@ -765,7 +784,7 @@ def create_model(
                 elems.append((ci, p, c, t))
         return elems
     model.s_LC_truck_in_ct = Set(
-        model.s_CP,
+        model.s_CPUnique,
         model.s_T,
         dimen=4,
         initialize=s_LC_truck_in_ct_INIT,
@@ -779,7 +798,7 @@ def create_model(
                 elems.append((ci, p, c, t))
         return elems
     model.s_LC_pipel_in_ct = Set(
-        model.s_CP,
+        model.s_CPUnique,
         model.s_T,
         dimen=4,
         initialize=s_LC_pipel_in_ct_INIT,
@@ -795,7 +814,7 @@ def create_model(
                 elems.append((pi, p, c, t))
         return elems
     model.s_LP_truck_out_pt = Set(
-        model.s_PP,
+        model.s_PPUnique,
         model.s_T,
         dimen=4,
         initialize=s_LP_truck_out_pt_INIT,
@@ -809,7 +828,7 @@ def create_model(
                 elems.append((pi, p, c, t))
         return elems
     model.s_LP_pipel_out_pt = Set(
-        model.s_PP,
+        model.s_PPUnique,
         model.s_T,
         dimen=4,
         initialize=s_LP_pipel_out_pt_INIT,
@@ -823,7 +842,7 @@ def create_model(
                 elems.append((ci, p, c, t))
         return elems
     model.s_LC_truck_out_pt = Set(
-        model.s_PP,
+        model.s_PPUnique,
         model.s_T,
         dimen=4,
         initialize=s_LC_truck_out_pt_INIT,
@@ -837,7 +856,7 @@ def create_model(
                 elems.append((ci, p, c, t))
         return elems
     model.s_LC_pipel_out_pt = Set(
-        model.s_PP,
+        model.s_PPUnique,
         model.s_T,
         dimen=4,
         initialize=s_LC_pipel_out_pt_INIT,
@@ -849,11 +868,11 @@ def create_model(
     def ProducerNodeMapINIT(model, p):
         pies = []
         for pi in model.s_PI:
-            if Producer_Wellpad[pi] == p:
+            if model.p_ProducerPadUnique[pi] == p:
                 pies.append(pi)
         return pies
     model.ProducerNodeMap = Set(
-        model.s_PP,
+        model.s_PPUnique,
         dimen=1,
         initialize=ProducerNodeMapINIT,
         doc="Mapping from producer node p in s_PP to pi in s_PI (one-to-many)",
@@ -868,7 +887,7 @@ def create_model(
         return peties
 
     model.ProducerNodeTimeMap = Set(
-        model.s_PP,
+        model.s_PPUnique,
         model.s_T,
         dimen=1,
         initialize=ProducerNodeTimeMapINIT,
@@ -879,12 +898,12 @@ def create_model(
     def ConsumerNodeMapINIT(model, c):
         cies = []
         for ci in model.s_CI:
-            if Consumer_Wellpad[ci] == c:
+            if model.p_ConsumerPadUnique[ci] == c:
                 cies.append(ci)
         return cies
 
     model.ConsumerNodeMap = Set(
-        model.s_CP,
+        model.s_CPUnique,
         dimen=1,
         initialize=ConsumerNodeMapINIT,
         doc="Mapping from consumer node c in s_CP to ci in s_CI (one-to-many)",
@@ -894,12 +913,12 @@ def create_model(
     def ConsumerNodeTimeMapINIT(model, c, t):
         ceties = []
         for ci in model.s_CI:
-            if Consumer_Wellpad[ci] == c and t in model.s_T_ci[ci]:
+            if model.p_ConsumerPadUnique[ci] == c and t in model.s_T_ci[ci]:
                 ceties.append(ci)
         return ceties
 
     model.ConsumerNodeTimeMap = Set(
-        model.s_CP,
+        model.s_CPUnique,
         model.s_T,
         dimen=1,
         initialize=ConsumerNodeTimeMapINIT,
@@ -1026,7 +1045,7 @@ def create_model(
     # Consumer piping bound
     def p_FC_pipel_UB_init(model, ci, p, c, t):
         if tc in model.s_T_ci[ci]:
-            return model.p_ConsumerTransportCapacityPipel[pi]
+            return model.p_ConsumerTransportCapacityPipel[ci]
         else:
             return 0
 
@@ -1086,7 +1105,7 @@ def create_model(
             return Constraint.Skip
 
     model.ConsumerDemandBalance = Constraint(
-        model.s_CP,
+        model.s_CPUnique,
         model.s_T,
         rule=ConsumerDemandBalanceRule,
         doc="Consumer demand balance",
@@ -1114,7 +1133,7 @@ def create_model(
             return Constraint.Skip
 
     model.ProducerSupplyBalance = Constraint(
-        model.s_PP,
+        model.s_PPUnique,
         model.s_T,
         rule=ProducerSupplyBalanceRule,
         doc="Producer Supply balance",
@@ -1151,8 +1170,8 @@ def create_model(
 
     model.ProducerTruckingMax = Constraint(
         model.s_PI,
-        model.s_PP,
-        model.s_CP,
+        model.s_PPUnique,
+        model.s_CPUnique,
         model.s_T,
         rule=ProducerTruckingMaxINIT,
         doc="Producer trucking maximum",
@@ -1166,8 +1185,8 @@ def create_model(
 
     model.ProducerPipingMax = Constraint(
         model.s_PI,
-        model.s_PP,
-        model.s_CP,
+        model.s_PPUnique,
+        model.s_CPUnique,
         model.s_T,
         rule=ProducerPipingMaxINIT,
         doc="Producer piping maximum",
@@ -1182,8 +1201,8 @@ def create_model(
 
     model.ConsumerTruckingMax = Constraint(
         model.s_CI,
-        model.s_PP,
-        model.s_CP,
+        model.s_PPUnique,
+        model.s_CPUnique,
         model.s_T,
         rule=ConsumerTruckingMaxINIT,
         doc="Consumer trucking maximum",
@@ -1197,8 +1216,8 @@ def create_model(
 
     model.ConsumerPipingMax = Constraint(
         model.s_CI,
-        model.s_PP,
-        model.s_CP,
+        model.s_PPUnique,
+        model.s_CPUnique,
         model.s_T,
         rule=ConsumerPipingMaxINIT,
         doc="Consumer piping maximum",
@@ -1246,11 +1265,12 @@ def create_model(
 
 # Create output dataframe
 def jsonize_outputs(model, matches_dir):
-    df_vP_Truck = pd.DataFrame(
+    df_FP_truck = pd.DataFrame(
         {
             "Carrier Index": key[0],
-            "From wellpad": model.p_ProducerPad[key[0]],
+            "From wellpad": model.p_ProducerPadUnique[key[0]],
             "To wellpad": key[2],
+
             "Date Index": key[3],
             "Date": model.d_T[key[3]],
             "Rate": value(model.v_FP_truck[key]),
@@ -1258,34 +1278,34 @@ def jsonize_outputs(model, matches_dir):
         for key in model.v_FP_truck
         if value(model.v_FP_truck[key]) > 0.01
     )
-    df_vP_Truck["Distance"] = add_dataframe_distance(df_vP_Truck, model.df_distance)
+    df_FP_truck["Distance"] = add_dataframe_distance(df_FP_truck, model.df_distance)
     #'To index': key[1],
     #'From operator': model.p_ProducerOperator[key[0]],
     #'To operator': model.p_ConsumerOperator[key[2]],
     # Timestamps (i.e., Pandas datetime format) are not JSON serializable; convert to string
-    if not df_vP_Truck.empty:
-        df_vP_Truck["Price"] = [
+    if not df_FP_truck.empty:
+        df_FP_truck["Price"] = [
             model.p_ConsumerNodalPrice[row["To wellpad"], row["Date Index"]].value
             - model.p_ProducerNodalPrice[row["From wellpad"], row["Date Index"]].value
-            for ind, row in df_vP_Truck.iterrows()
+            for ind, row in df_FP_truck.iterrows()
         ]
-        df_vP_Truck["Date"] = df_vP_Truck["Date"].dt.strftime("%Y/%m/%d")
-        df_vP_Truck["From Longitude"] = [
+        df_FP_truck["Date"] = df_FP_truck["Date"].dt.strftime("%Y/%m/%d")
+        df_FP_truck["From Longitude"] = [
             model.p_ProducerWellpadLon[pad]
-            for pad in df_vP_Truck.loc[:, "From wellpad"]
+            for pad in df_FP_truck.loc[:, "From wellpad"]
         ]
-        df_vP_Truck["From Latitude"] = [
+        df_FP_truck["From Latitude"] = [
             model.p_ProducerWellpadLat[pad]
-            for pad in df_vP_Truck.loc[:, "From wellpad"]
+            for pad in df_FP_truck.loc[:, "From wellpad"]
         ]
-        df_vP_Truck["To Longitude"] = [
-            model.p_ConsumerWellpadLon[pad] for pad in df_vP_Truck.loc[:, "To wellpad"]
+        df_FP_truck["To Longitude"] = [
+            model.p_ConsumerWellpadLon[pad] for pad in df_FP_truck.loc[:, "To wellpad"]
         ]
-        df_vP_Truck["To Latitude"] = [
-            model.p_ConsumerWellpadLat[pad] for pad in df_vP_Truck.loc[:, "To wellpad"]
+        df_FP_truck["To Latitude"] = [
+            model.p_ConsumerWellpadLat[pad] for pad in df_FP_truck.loc[:, "To wellpad"]
         ]
-        df_vP_Truck["Operator"] = [
-            model.p_ProducerOperator[index] for index in df_vP_Truck["Carrier Index"]
+        df_FP_truck["Operator"] = [
+            model.p_ProducerOperator[index] for index in df_FP_truck["Carrier Index"]
         ]
 
     df_vM_Truck = pd.DataFrame(
@@ -1338,7 +1358,7 @@ def jsonize_outputs(model, matches_dir):
     df_v_Supply = pd.DataFrame(
         {
             "Supplier Index": key[0],
-            "Supplier Wellpad": model.p_ProducerPad[key[0]],
+            "Supplier Wellpad": model.p_ProducerPadUnique[key[0]],
             "Date Index": key[1],
             "Date": model.d_T[key[1]],
             "Rate": value(model.v_Supply[key]),
@@ -1400,7 +1420,7 @@ def jsonize_outputs(model, matches_dir):
         return None
 
     # convert dataframes to dictionaries for easy json output
-    d_vP_Truck = df_vP_Truck.to_dict(orient="records")
+    d_vP_Truck = df_FP_truck.to_dict(orient="records")
     d_vM_Truck = df_vM_Truck.to_dict(orient="records")
     d_v_Supply = df_v_Supply.to_dict(orient="records")
     d_v_Demand = df_v_Demand.to_dict(orient="records")
@@ -1419,24 +1439,24 @@ def jsonize_outputs(model, matches_dir):
     return None
 
 
-# Create secondary dataframe for outputting profit
+# Create secondary dataframe to output profit
 def jsonize_profits(model, profits_dir):
     # Create dataframes from paramter data
-    df_ProducerProfit = pd.DataFrame(
+    df_ProducerVolumeProfit = pd.DataFrame(
         {
             "Producer Index": key,
-            "Profit": model.p_ProducerProfit[key].value,
+            "Profit": model.p_ProducerVolumeProfit[key].value,
             "Operator": model.p_ProducerOperator[key],
         }
-        for key in model.p_ProducerProfit
+        for key in model.p_ProducerVolumeProfit
     )
-    df_ConsumerProfit = pd.DataFrame(
+    df_ConsumerVolumeProfit = pd.DataFrame(
         {
             "Consumer Index": key,
-            "Profit": model.p_ConsumerProfit[key].value,
+            "Profit": model.p_ConsumerVolumeProfit[key].value,
             "Operator": model.p_ConsumerOperator[key],
         }
-        for key in model.p_ConsumerProfit
+        for key in model.p_ConsumerVolumeProfit
     )
     df_MidstreamProfit = pd.DataFrame(
         {
@@ -1456,15 +1476,15 @@ def jsonize_profits(model, profits_dir):
     )
 
     # convert to dictionaries for easy json output
-    d_ProducerProfit = df_ProducerProfit.to_dict(orient="records")
-    d_ConsumerProfit = df_ConsumerProfit.to_dict(orient="records")
+    d_ProducerVolumeProfit = df_ProducerVolumeProfit.to_dict(orient="records")
+    d_ConsumerVolumeProfit = df_ConsumerVolumeProfit.to_dict(orient="records")
     d_MidstreamProfit = df_MidstreamProfit.to_dict(orient="records")
     d_ProducerTransportProfit = df_ProducerTransportProfit.to_dict(orient="records")
     with open(profits_dir, "w") as data_file:
         json.dump(
             {
-                "Supply": d_ProducerProfit,
-                "Demand": d_ConsumerProfit,
+                "Supply": d_ProducerVolumeProfit,
+                "Demand": d_ConsumerVolumeProfit,
                 "Transport (Producer)": d_ProducerTransportProfit,
                 "Transport (Midstream)": d_MidstreamProfit,
             },
@@ -1476,19 +1496,24 @@ def jsonize_profits(model, profits_dir):
 
 # Post-solve calculations
 def PostSolve(model):
-    # Producer Nodal Price
-    # ProducerNodalPriceINIT = dict.fromkeys([(p,t) for p in model.s_PP for t in model.s_T], None)
-    # for index in model.ProducerSupplyBalance:
-    #    ProducerNodalPriceINIT[index] = model.dual[model.ProducerSupplyBalance[index]]
+    """
+    # NOTE: Dual variables *might* be defined in the negative by a given solver
+    # (i.e., solver returns a negative value where the "correct" interpretation is positive);
+    # may need to multiply by -1 to get meaningful results
+    # GLPK does this; multiply duals by (-1) if using GLPK.
+    # SEARCH for "(-1) multiplier" to find where this is/needs to be done
+    """
+    ### PRICES
+    # Get producer Nodal Prices from clearing constraint dual variables
     def ProducerNodalPriceINIT(model, p, t):
         try:
-            # NOTE: Dual variables might be negative; may need to multiply by -1 to get meaningful results
+            # NOTE: (-1) multiplier here for dual
             return -1 * model.dual[model.ProducerSupplyBalance[p, t]]
         except:
             return None
 
     model.p_ProducerNodalPrice = Param(
-        model.s_PP,
+        model.s_PPUnique,
         model.s_T,
         within=Any,
         initialize=ProducerNodalPriceINIT,
@@ -1496,15 +1521,16 @@ def PostSolve(model):
         doc="Producer Nodal Price [currency_volume]",
     )
 
-    # Consumer Nodal Price
+    # Get consumer Nodal Prices from clearing constraint dual variables
     def ConsumerNodalPriceINIT(model, c, t):
         try:
+            # NOTE: (-1) multiplier here for dual
             return -1 * value(model.dual[model.ConsumerDemandBalance[c, t]])
         except:
             return None
 
     model.p_ConsumerNodalPrice = Param(
-        model.s_CP,
+        model.s_CPUnique,
         model.s_T,
         within=Any,
         initialize=ConsumerNodalPriceINIT,
@@ -1512,29 +1538,30 @@ def PostSolve(model):
         doc="Consumer Nodal Price [currency_volume]",
     )
 
-    # Transport Price
-    def TransportPriceINIT(model, p, c, tp, tc):
+    # Get trucking nodal prices from nodal price differences
+    def TransportPriceINIT(model,p,c,t):
         try:
+            # NOTE: (-1) multiplier here for dual
             return value(
-                -1 * model.dual[model.ConsumerDemandBalance[c, tc]]
-                - (-1) * model.dual[model.ProducerSupplyBalance[p, tp]]
+                -1 * model.dual[model.ConsumerDemandBalance[c, t]]
+                - (-1) * model.dual[model.ProducerSupplyBalance[p, t]]
             )
         except:
             return None
 
     model.p_TransportPrice = Param(
-        model.s_PP,
-        model.s_CP,
-        model.s_T,
+        model.s_PPUnique,
+        model.s_CPUnique,
         model.s_T,
         within=Any,
         initialize=TransportPriceINIT,
         units=model.model_units["currency_volume"],
-        doc="Transportation Price [currency_volume]",
+        doc="Transport Nodal Price [currency_volume]",
     )
 
-    # Supplier Profit
-    def ProducerProfitINIT(model, pi):
+    ### PROFITS
+    # Supplier Volume Profit
+    def ProducerVolumeProfitINIT(model, pi):
         p = model.p_ProducerPadUnique[pi]
         try:
             return sum(
@@ -1548,16 +1575,16 @@ def PostSolve(model):
         except:
             return 0
 
-    model.p_ProducerProfit = Param(
+    model.p_ProducerVolumeProfit = Param(
         model.s_PI,
         within=Any,
-        initialize=ProducerProfitINIT,
+        initialize=ProducerVolumeProfitINIT,
         units=model.model_units["currency"],
-        doc="Producer profit [currency]",
+        doc="Producer volume profit [currency]",
     )
 
     # Consumer Profit
-    def ConsumerProfitINIT(model, ci):
+    def ConsumerVolumeProfitINIT(model, ci):
         c = model.p_ConsumerPadUnique[ci]
         try:
             return sum(
@@ -1571,86 +1598,71 @@ def PostSolve(model):
         except:
             return 0
 
-    model.p_ConsumerProfit = Param(
+    model.p_ConsumerVolumeProfit = Param(
         model.s_CI,
         within=Any,
-        initialize=ConsumerProfitINIT,
+        initialize=ConsumerVolumeProfitINIT,
         units=model.model_units["currency"],
         doc="Consumer profit [currency]",
     )
 
-    # Midstream per-route Profit
-    def MidstreamRouteProfitINIT(model, mi, p, c, tp, tc):
-        try:
-            if tp in model.s_T_mi[mi] and tc in model.s_T_mi[mi]:
-                return (
-                    model.p_TransportPrice[p, c, tp, tc].value
-                    - model.p_MidstreamBid[mi].value
-                ) * model.v_FM_Trucked[mi, p, c, tp, tc].value
-                # return (model.p_TransportPrice[p,c,tp,tc].value - model.p_MidstreamBid[mi].value*model.p_ArcDistance[p,c].value)*model.v_FM_Trucked[mi,p,c,tp,tc].value
-            else:
-                return 0
-        except:
-            return 0
-
-    model.p_MidstreamRouteProfit = Param(
-        model.s_MI,
-        model.s_PP,
-        model.s_CP,
-        model.s_T,
-        model.s_T,
-        within=Any,
-        initialize=MidstreamRouteProfitINIT,
-        units=model.model_units["currency"],
-        doc="Midstream profit [currency]",
-    )
-
-    # Midstream total Profit
-    def MidstreamTotalProfitINIT(model, mi):
-        return sum(
-            model.p_MidstreamRouteProfit[mii, p, c, tp, tc]
-            for (mii, p, c, tp, tc) in model.s_LLM
-            if mii == mi
-        )
-
-    model.p_MidstreamTotalProfit = Param(
-        model.s_MI,
-        within=Any,
-        initialize=MidstreamTotalProfitINIT,
-        units=model.model_units["currency"],
-        doc="Midstream total profit [currency]",
-    )
-
-    # Producer Transport per-route Profit
-    def ProducerRouteProfitINIT(model, pi, p, c, t):
+    # Producer Trucking Transport per-route Profit
+    def ProducerTruckProfitINIT(model, pi, p, c, t):
         try:
             if t in model.s_T_pi[pi]:
                 return (
-                    model.p_TransportPrice[p, c, t, t].value
+                    model.p_TransportPrice[p, c, t].value
                     - model.p_ProducerTransportBidTruck[pi].value
                 ) * model.v_FP_truck[pi, p, c, t].value
-                # return (model.p_TransportPrice[p,c,t,t].value - model.p_ProducerTransportBidTruck[pi].value*model.p_ArcDistance[p,c].value)*model.v_FP_truck[pi,p,c,t].value
             else:
                 return 0
         except:
             return 0
 
-    model.p_ProducerRouteProfit = Param(
+    model.p_ProducerTruckProfit = Param(
         model.s_PI,
-        model.s_PP,
-        model.s_CP,
+        model.s_PPUnique,
+        model.s_CPUnique,
         model.s_T,
         within=Any,
-        initialize=ProducerRouteProfitINIT,
+        initialize=ProducerTruckProfitINIT,
         units=model.model_units["currency"],
-        doc="Producer per-route transport profit [currency]",
+        doc="Producer per-route trucking transport profit [currency]",
+    )
+
+    # Producer Piping Transport per-route Profit
+    def ProducerPipelProfitINIT(model, pi, p, c, t):
+        try:
+            if t in model.s_T_pi[pi]:
+                return (
+                    model.p_TransportPrice[p, c, t].value
+                    - model.p_ProducerTransportBidPipel[pi].value
+                ) * model.v_FP_pipel[pi, p, c, t].value
+            else:
+                return 0
+        except:
+            return 0
+
+    model.p_ProducerPipelProfit = Param(
+        model.s_PI,
+        model.s_PPUnique,
+        model.s_CPUnique,
+        model.s_T,
+        within=Any,
+        initialize=ProducerPipelProfitINIT,
+        units=model.model_units["currency"],
+        doc="Producer per-line pipeline transport profit [currency]",
     )
 
     # Producer Transport Total Profit
     def ProducerTotalProfitINIT(model, pi):
         return sum(
-            model.p_ProducerRouteProfit[pii, p, c, t]
+            model.p_ProducerTruckProfit[pii, p, c, t]
             for (pii, p, c, t) in model.s_LP_truck
+            if pii == pi
+        ) + sum(
+            model.p_ProducerPipelProfit[pii, p, c, t]
+            for (pii, p, c, t) in model.s_LP_pipel
             if pii == pi
         )
 
@@ -1659,7 +1671,75 @@ def PostSolve(model):
         within=Any,
         initialize=ProducerTotalProfitINIT,
         units=model.model_units["currency"],
-        doc="Producer total transport profit [currency]",
+        doc="Producer total combined transport profit [currency]",
+    )
+
+    # Consumer Trucking Transport per-route Profit
+    def ConsumerTruckProfitINIT(model, ci, p, c, t):
+        try:
+            if t in model.s_T_ci[ci]:
+                return (
+                    model.p_TransportPrice[p, c, t].value
+                    - model.p_ConsumerTransportBidTruck[ci].value
+                ) * model.v_FC_truck[ci, p, c, t].value
+            else:
+                return 0
+        except:
+            return 0
+
+    model.p_ConsumerTruckProfit = Param(
+        model.s_CI,
+        model.s_PPUnique,
+        model.s_CPUnique,
+        model.s_T,
+        within=Any,
+        initialize=ConsumerTruckProfitINIT,
+        units=model.model_units["currency"],
+        doc="Consumer per-route trucking transport profit [currency]",
+    )
+
+    # Consumer Piping Transport per-route Profit
+    def ConsumerPipelProfitINIT(model, ci, p, c, t):
+        try:
+            if t in model.s_T_ci[ci]:
+                return (
+                    model.p_TransportPrice[p, c, t].value
+                    - model.p_ConsumerTransportBidPipel[ci].value
+                ) * model.v_FC_pipel[ci, p, c, t].value
+            else:
+                return 0
+        except:
+            return 0
+
+    model.p_ConsumerPipelProfit = Param(
+        model.s_CI,
+        model.s_PPUnique,
+        model.s_CPUnique,
+        model.s_T,
+        within=Any,
+        initialize=ConsumerPipelProfitINIT,
+        units=model.model_units["currency"],
+        doc="Consumer per-line pipeline transport profit [currency]",
+    )
+
+    # Consumer Transport Total Profit
+    def ConsumerTotalProfitINIT(model, ci):
+        return sum(
+            model.p_ConsumerTruckProfit[cii, p, c, t]
+            for (cii, p, c, t) in model.s_LC_truck
+            if cii == ci
+        ) + sum(
+            model.p_ConsumerPipelProfit[cii, p, c, t]
+            for (cii, p, c, t) in model.s_LC_pipel
+            if cii == ci
+        )
+
+    model.p_ConsumerTotalTransportProfit = Param(
+        model.s_CI,
+        within=Any,
+        initialize=ConsumerTotalProfitINIT,
+        units=model.model_units["currency"],
+        doc="Consumer total combined transport profit [currency]",
     )
 
     return model
@@ -1704,7 +1784,7 @@ def DataViews(model, save_dir):
     # Consumer set
     fo.write("\n" + PrintSpacer)
     fo.write("\nConsumer index mapping set")
-    for c in model.s_CP:
+    for c in model.s_CPUnique:
         for t in model.s_T:
             fo.write(
                 "\n" + c + "," + t + ": " + ",".join(model.ConsumerNodeTimeMap[c, t])
@@ -1714,7 +1794,7 @@ def DataViews(model, save_dir):
     # Consumer inbound nodes set
     fo.write("\n"+PrintSpacer)
     fo.write("\nConsumer inbound arcs index set")
-    for c in model.s_CP:
+    for c in model.s_CPUnique:
         for t in model.s_T:
             fo.write("\n"+c+","+t+": "+ ",".join(model.s_LM_in_ct[c,t]))
             """
@@ -1738,13 +1818,13 @@ def PostSolveViews(model, save_dir):
     fo.write("\n" + PrintSpacer)
     fo.write("\nProducer Profits [currency]")
     for pi in model.s_PI:
-        fo.write("\n" + pi + ": " + str(model.p_ProducerProfit[pi].value))
+        fo.write("\n" + pi + ": " + str(model.p_ProducerVolumeProfit[pi].value))
 
     # Consumer Profits
     fo.write("\n" + PrintSpacer)
     fo.write("\nConsumer Profits [currency]")
     for ci in model.s_CI:
-        fo.write("\n" + ci + ": " + str(model.p_ConsumerProfit[ci].value))
+        fo.write("\n" + ci + ": " + str(model.p_ConsumerVolumeProfit[ci].value))
 
     # Midstream per-route Profits
     fo.write("\n" + PrintSpacer)
@@ -1765,7 +1845,7 @@ def PostSolveViews(model, save_dir):
             "\n"
             + ",".join((pi, p, c, t))
             + ": "
-            + str(model.p_ProducerRouteProfit[pi, p, c, t].value)
+            + str(model.p_ProducerTruckProfit[pi, p, c, t].value)
         )
 
     # Producer variable value
@@ -1777,7 +1857,7 @@ def PostSolveViews(model, save_dir):
                 "\n"
                 + pi
                 + ","
-                + model.p_ProducerPad[pi]
+                + model.p_ProducerPadUnique[pi]
                 + ","
                 + t
                 + ": "
@@ -1793,7 +1873,7 @@ def PostSolveViews(model, save_dir):
                 "\n"
                 + ci
                 + ","
-                + model.p_ConsumerPad[ci]
+                + model.p_ConsumerPadUnique[ci]
                 + ","
                 + t
                 + ": "
@@ -1814,7 +1894,7 @@ def PostSolveViews(model, save_dir):
     # Producer nodal prices
     fo.write("\n" + PrintSpacer)
     fo.write("\nProducer Nodal Prices [currency_volume]")
-    for (p, t) in model.s_PP * model.s_T:
+    for (p, t) in model.s_PPUnique * model.s_T:
         fo.write(
             "\n" + ",".join((p, t)) + ": " + str(model.p_ProducerNodalPrice[p, t].value)
         )
@@ -1822,7 +1902,7 @@ def PostSolveViews(model, save_dir):
     # Consumer nodal prices
     fo.write("\n" + PrintSpacer)
     fo.write("\nConsumer Nodal Prices [currency_volume]")
-    for (c, t) in model.s_CP * model.s_T:
+    for (c, t) in model.s_CPUnique * model.s_T:
         fo.write(
             "\n" + ",".join((c, t)) + ": " + str(model.p_ConsumerNodalPrice[c, t].value)
         )
@@ -1830,7 +1910,7 @@ def PostSolveViews(model, save_dir):
     # Transportation prices
     fo.write("\n" + PrintSpacer)
     fo.write("\nTransportation Prices [currency_volume]")
-    for (p, c, tp, tc) in model.s_PP * model.s_CP * model.s_T * model.s_T:
+    for (p, c, tp, tc) in model.s_PPUnique * model.s_CPUnique * model.s_T * model.s_T:
         fo.write(
             "\n"
             + ",".join((p, c, tp, tc))

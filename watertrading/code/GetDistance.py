@@ -50,8 +50,8 @@ def get_driving_distance(distance_JSON, DF_PRODUCER, DF_CONSUMER):
     DF_PRODUCER - Producer dataframe
     DF_CONSUMER - Consumer dataframe
     """
-    origin = DF_PRODUCER.set_index(["Wellpad"]).T.to_dict()
-    destination = DF_CONSUMER.set_index(["Wellpad"]).T.to_dict()
+    origin = DF_PRODUCER.set_index(["WellpadUnique"]).T.to_dict()
+    destination = DF_CONSUMER.set_index(["WellpadUnique"]).T.to_dict()
 
     origins_loc = []
     destination_loc = []
