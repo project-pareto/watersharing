@@ -323,3 +323,76 @@ def GetUniqueDFData(df, key_col, val_col):
     """
     uniques = df.drop_duplicates(key_col)
     return dict(zip(uniques.loc[:, key_col], uniques.loc[:, val_col]))
+
+
+##################################################
+def GenerateCombinationDataFrame(df1,df2,name,newname1,newname2):
+    """
+    Returns a DataFrame consisting of the combinations of the entities in df1 and df2
+    NOTE: column DataFrames can be extracted using double-square brackets without conversion to sequence
+    Inputs:
+    - df1: an m1-by-1 DataFrame (column dataframe)
+    - df2: an m2-by-1 DataFrame (column dataframe)
+    Outputs:
+    -df_cross: an m1xm2-by-2 DataFrame
+    """
+    # Will use pd.merge; reqiures some trickery; we will add dummy indices to get the dehavior we want
+    pd.options.mode.chained_assignment = None # to stop pandas warning us about the behavior we are using
+    df1["temp"] = 1
+    df2["temp"] = 1
+    # rename columns for output (and to avoid merge)
+    df1.rename(columns={name: newname1},inplace=True)
+    df2.rename(columns={name: newname2},inplace=True)
+    # merge: df_cross =
+    return df1.merge(df2, on="temp", how="outer").drop(columns="temp")
+
+
+##################################################
+def SupplierBalanceType(value):
+    """
+    A simple function that returns "I will pay" if the price value is negative and "To be paid to me" if it is positive; the opposite behavior of ConsumerBalanceType
+    Inputs:
+    - value: a price value
+    Outputs:
+    - a string, either "I will pay" or "To be paid to me" depending on value
+    """
+    if value < 0:
+        return "I will pay"
+    if value >= 0:
+        return "To be paid to me"
+    else:
+        raise Exception("Please ensure the value entered is a number.")
+
+
+##################################################
+def ConsumerBalanceType(value):
+    """
+    A simple function that returns "I will pay" if the price value is positive and "To be paid to me" if it is negative; the opposite behavior of SupplierBalanceType
+    Inputs:
+    - value: a price value
+    Outputs:
+    - a string, either "I will pay" or "To be paid to me" depending on value
+    """
+    if value < 0:
+        return "I will pay"
+    if value >= 0:
+        return "To be paid to me"
+    else:
+        raise Exception("Please ensure the value entered is a number.")
+
+
+##################################################
+def NetBalanceType(value):
+    """
+    A simple function that returns "I will pay" if the price value is positive and "To be paid to me" if it is negative; a measure of total match value
+    Inputs:
+    - value: a price value
+    Outputs:
+    - a string, either "I will pay" or "To be paid to me" depending on value
+    """
+    if value < 0:
+        return "I will pay"
+    if value >= 0:
+        return "To be paid to me"
+    else:
+        raise Exception("Please ensure the value entered is a number.")

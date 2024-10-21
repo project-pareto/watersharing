@@ -76,9 +76,9 @@ def run_optimization_models(
         print("results are optimal")
         water_sharing = BuildModel.PostSolve(water_sharing)
         BuildModel.jsonize_outputs(water_sharing, matches_dir)
-        BuildModel.jsonize_profits(water_sharing, profits_dir)
-        BuildModel.DataViews(water_sharing, data_dir)
-        BuildModel.PostSolveViews(water_sharing, data_dir)
+        #BuildModel.jsonize_profits(water_sharing, profits_dir)
+        #BuildModel.DataViews(water_sharing, data_dir)
+        #BuildModel.PostSolveViews(water_sharing, data_dir)
         return None
     else:
         print("results are invalid")
