@@ -29,6 +29,8 @@ from Utilities import (
     add_dataframe_prices,
     GetUniqueDFData,
     GenerateCombinationDataFrame,
+    SupplierBidType,
+    ConsumerBidType,
     SupplierBalanceType,
     ConsumerBalanceType,
     NetBalanceType
@@ -125,6 +127,10 @@ def get_data(
     # add unique keys for wellpads as userID-wellpadID-Lon-Lat (in case multiple users have duplicate names)
     df_producer["WellpadUnique"] = df_producer.index +"|"+ df_producer["Wellpad"] +"|"+ df_producer["Longitude"].astype(str) +"|"+ df_producer["Latitude"].astype(str)
     df_consumer["WellpadUnique"] = df_consumer.index +"|"+ df_consumer["Wellpad"] +"|"+ df_consumer["Longitude"].astype(str) +"|"+ df_consumer["Latitude"].astype(str)
+
+    # Process raw bids to get model bid conventions
+    df_producer["Supplier Bid (model)"] = df_producer["Bid Type"].apply(SupplierBidType)*df_producer["Supplier Bid (USD/bbl)"]
+    df_consumer["Consumer Bid (model)"] = df_consumer["Bid Type"].apply(ConsumerBidType)*df_consumer["Consumer Bid (USD/bbl)"]
 
     # Initialize dataframes ()
     df_distance = pd.DataFrame()
@@ -274,6 +280,15 @@ def create_model(
         doc="Reverse-lookup from wellpad unique ID to original name",
     )
 
+    # Add a reverse-lookup unique wellpad to request ID
+    Producer_WellIDMap = dict(zip(model.df_producer.WellpadUnique, model.df_producer.index))
+    model.p_ProducerWellIDMap = Param(
+        model.s_PPUnique,
+        within=Any,  # to suppress Pyomo warning
+        initialize=Producer_WellIDMap,
+        doc="Reverse-lookup from wellpad unique ID to request ID",
+    )
+
     Producer_Operator = dict(zip(model.df_producer.index,model.df_producer.Operator))
     model.p_ProducerOperator = Param(
         model.s_PI,
@@ -325,7 +340,7 @@ def create_model(
     Producer_Supply_Bid = dict(
         zip(
             model.df_producer.index,
-            model.df_producer["Supplier Bid (USD/bbl)"]
+            model.df_producer["Supplier Bid (model)"]
         )
     )
     model.p_ProducerSupplyBid = Param(
@@ -334,6 +349,32 @@ def create_model(
         initialize=Producer_Supply_Bid,
         units=model.model_units["currency_volume"],
         doc="Producer water supply bid [currency_volume]",
+    )
+
+    # Boolean values for 3rd party transport providers
+    Producer_Trucks_Accepted = dict(
+        zip(
+            model.df_producer["WellpadUnique"],
+            model.df_producer["Trucks Accepted"]
+        )
+    )
+    model.p_Producer_Trucks_Accepted = Param(
+        model.s_PPUnique,
+        within=Any,  # to suppress Pyomo warning
+        initialize=Producer_Trucks_Accepted,
+        doc="Producer accepts 3rd party trucks [Bool]",
+    )
+    Producer_Pipes_Accepted = dict(
+        zip(
+            model.df_producer["WellpadUnique"],
+            model.df_producer["Pipes Accepted"]
+        )
+    )
+    model.p_Producer_Pipes_Accepted = Param(
+        model.s_PPUnique,
+        within=Any,  # to suppress Pyomo warning
+        initialize=Producer_Pipes_Accepted,
+        doc="Producer accepts 3rd party pipes [Bool]",
     )
 
     ProducerMaxRangeTruck = dict(
@@ -446,6 +487,15 @@ def create_model(
         doc="Reverse-lookup from wellpad unique ID to original name",
     )
 
+    # Add a reverse-lookup unique wellpad to request ID
+    Consumer_WellIDMap = dict(zip(model.df_consumer.WellpadUnique, model.df_consumer.index))
+    model.p_ConsumerWellIDMap = Param(
+        model.s_CPUnique,
+        within=Any,  # to suppress Pyomo warning
+        initialize=Consumer_WellIDMap,
+        doc="Reverse-lookup from wellpad unique ID to request ID",
+    )
+
     Consumer_Operator = dict(zip(model.df_consumer.index, model.df_consumer.Operator))
     model.p_ConsumerOperator = Param(
         model.s_CI,
@@ -492,7 +542,7 @@ def create_model(
     )
 
     Consumer_Demand_Bid = dict(
-        zip(model.df_consumer.index, model.df_consumer["Consumer Bid (USD/bbl)"])
+        zip(model.df_consumer.index, model.df_consumer["Consumer Bid (model)"])
     )
     model.p_ConsumerDemandBid = Param(
         model.s_CI,
@@ -500,6 +550,32 @@ def create_model(
         initialize=Consumer_Demand_Bid,
         units=model.model_units["currency_volume"],
         doc="Consumer water demand bid [currency_volume]",
+    )
+
+    # Boolean values for 3rd party transport providers
+    Consumer_Trucks_Accepted = dict(
+        zip(
+            model.df_consumer["WellpadUnique"],
+            model.df_consumer["Trucks Accepted"]
+        )
+    )
+    model.p_Consumer_Trucks_Accepted = Param(
+        model.s_CPUnique,
+        within=Any,  # to suppress Pyomo warning
+        initialize=Consumer_Trucks_Accepted,
+        doc="Consumer accepts 3rd party trucks [Bool]",
+    )
+    Consumer_Pipes_Accepted = dict(
+        zip(
+            model.df_consumer["WellpadUnique"],
+            model.df_consumer["Pipes Accepted"]
+        )
+    )
+    model.p_Consumer_Pipes_Accepted = Param(
+        model.s_CPUnique,
+        within=Any,  # to suppress Pyomo warning
+        initialize=Consumer_Pipes_Accepted,
+        doc="Consumer accepts 3rd party pipes [Bool]",
     )
 
     ConsumerMaxRangeTruck = dict(
@@ -754,7 +830,7 @@ def create_model(
     def s_LP_truck_in_ct_INIT(model, cp, tc):
         elems = []
         for (pi, p, c, t) in model.s_LP_truck.ordered_data():
-            if c == cp and t == tc:
+            if c == cp and t == tc and model.p_Consumer_Trucks_Accepted[cp]:
                 elems.append((pi, p, c, t))
         return elems
     model.s_LP_truck_in_ct = Set(
@@ -768,7 +844,7 @@ def create_model(
     def s_LP_pipel_in_ct_INIT(model, cp, tc):
         elems = []
         for (pi, p, c, t) in model.s_LP_pipel.ordered_data():
-            if c == cp and t == tc:
+            if c == cp and t == tc and model.p_Consumer_Pipes_Accepted[cp]:
                 elems.append((pi, p, c, t))
         return elems
     model.s_LP_pipel_in_ct = Set(
@@ -840,7 +916,7 @@ def create_model(
     def s_LC_truck_out_pt_INIT(model, pp, tp):
         elems = []
         for (ci, p, c, t) in model.s_LC_truck.ordered_data():
-            if p == pp and t == tp:
+            if p == pp and t == tp and model.p_Producer_Trucks_Accepted[pp]:
                 elems.append((ci, p, c, t))
         return elems
     model.s_LC_truck_out_pt = Set(
@@ -854,7 +930,7 @@ def create_model(
     def s_LC_pipel_out_pt_INIT(model, pp, tp):
         elems = []
         for (ci, p, c, t) in model.s_LC_pipel.ordered_data():
-            if p == pp and t == tp:
+            if p == pp and t == tp and model.p_Producer_Pipes_Accepted[pp]:
                 elems.append((ci, p, c, t))
         return elems
     model.s_LC_pipel_out_pt = Set(
@@ -1349,7 +1425,9 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
     # Iterate over requests, identify matches, and add lines to output supply match dataframe
     d_supply_match = {
         "Index":[],
+        "Pair Index":[],
         "Operator":[],
+        "UserID":[],
         "Wellpad":[],
         "Longitude":[],
         "Latitude":[],
@@ -1357,6 +1435,9 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
         "End Date":[],
         "Supply Rate (bpd)":[],
         "Supplier Bid (USD/bbl)":[],
+        "Bid Type":[],
+        "Trucks Accepted":[],
+        "Pipes Accepted":[],
         "Truck Max Dist (mi)":[],
         "Trucking Capacity (bpd)":[],
         "Truck Transport Bid (USD/bbl)":[],
@@ -1368,7 +1449,9 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
 
     d_demand_match = {
         "Index":[],
+        "Pair Index":[],
         "Operator":[],
+        "UserID":[],
         "Wellpad":[],
         "Longitude":[],
         "Latitude":[],
@@ -1376,6 +1459,9 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
         "End Date":[],
         "Demand Rate (bpd)":[],
         "Consumer Bid (USD/bbl)":[],
+        "Bid Type":[],
+        "Trucks Accepted":[],
+        "Pipes Accepted":[],
         "Truck Max Dist (mi)":[],
         "Trucking Capacity (bpd)":[],
         "Truck Transport Bid (USD/bbl)":[],
@@ -1401,7 +1487,9 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
                 if not (df_FP_truck_filter.empty and df_FP_pipel_filter.empty and df_FC_truck_filter.empty and df_FC_pipel_filter.empty): # there's a match with this destination
                     # populate main-level match detail dictionary
                     d_supply_match["Index"].append(pi)
+                    d_supply_match["Pair Index"].append(pi+"-"+model.p_ConsumerWellIDMap[c])
                     d_supply_match["Operator"].append(model.df_producer.loc[pi,"Operator"])
+                    d_supply_match["UserID"].append(model.df_producer.loc[pi,"UserID"])
                     d_supply_match["Wellpad"].append(model.df_producer.loc[pi,"Wellpad"])
                     d_supply_match["Longitude"].append(model.df_producer.loc[pi,"Longitude"])
                     d_supply_match["Latitude"].append(model.df_producer.loc[pi,"Latitude"])
@@ -1409,6 +1497,9 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
                     d_supply_match["End Date"].append(model.df_producer.loc[pi,"End Date"])
                     d_supply_match["Supply Rate (bpd)"].append(model.df_producer.loc[pi,"Supply Rate (bpd)"])
                     d_supply_match["Supplier Bid (USD/bbl)"].append(model.df_producer.loc[pi,"Supplier Bid (USD/bbl)"])
+                    d_supply_match["Bid Type"].append(model.df_producer.loc[pi,"Bid Type"])
+                    d_supply_match["Trucks Accepted"].append(model.df_producer.loc[pi,"Trucks Accepted"])
+                    d_supply_match["Pipes Accepted"].append(model.df_producer.loc[pi,"Pipes Accepted"])
                     d_supply_match["Truck Max Dist (mi)"].append(model.df_producer.loc[pi,"Truck Max Dist (mi)"])
                     d_supply_match["Trucking Capacity (bpd)"].append(model.df_producer.loc[pi,"Trucking Capacity (bpd)"])
                     d_supply_match["Truck Transport Bid (USD/bbl)"].append(model.df_producer.loc[pi,"Truck Transport Bid (USD/bbl)"])
@@ -1523,7 +1614,9 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
                 if not (df_FP_truck_filter.empty and df_FP_pipel_filter.empty and df_FC_truck_filter.empty and df_FC_pipel_filter.empty): # there's a match with this destination
                     # populate main-level match detail dictionary
                     d_demand_match["Index"].append(ci)
+                    d_demand_match["Pair Index"].append(ci+"-"+model.p_ProducerWellIDMap[p])
                     d_demand_match["Operator"].append(model.df_consumer.loc[ci,"Operator"])
+                    d_demand_match["UserID"].append(model.df_consumer.loc[ci,"UserID"])
                     d_demand_match["Wellpad"].append(model.df_consumer.loc[ci,"Wellpad"])
                     d_demand_match["Longitude"].append(model.df_consumer.loc[ci,"Longitude"])
                     d_demand_match["Latitude"].append(model.df_consumer.loc[ci,"Latitude"])
@@ -1531,6 +1624,9 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
                     d_demand_match["End Date"].append(model.df_consumer.loc[ci,"End Date"])
                     d_demand_match["Demand Rate (bpd)"].append(model.df_consumer.loc[pi,"Demand Rate (bpd)"])
                     d_demand_match["Consumer Bid (USD/bbl)"].append(model.df_consumer.loc[pi,"Consumer Bid (USD/bbl)"])
+                    d_demand_match["Bid Type"].append(model.df_consumer.loc[pi,"Bid Type"])
+                    d_demand_match["Trucks Accepted"].append(model.df_consumer.loc[pi,"Trucks Accepted"])
+                    d_demand_match["Pipes Accepted"].append(model.df_consumer.loc[pi,"Pipes Accepted"])
                     d_demand_match["Truck Max Dist (mi)"].append(model.df_consumer.loc[pi,"Truck Max Dist (mi)"])
                     d_demand_match["Trucking Capacity (bpd)"].append(model.df_consumer.loc[pi,"Trucking Capacity (bpd)"])
                     d_demand_match["Truck Transport Bid (USD/bbl)"].append(model.df_consumer.loc[pi,"Truck Transport Bid (USD/bbl)"])
@@ -2146,3 +2242,53 @@ def FilterRequests(df_producer, df_consumer, filter_by_date):
         & (df_consumer["End Date"] == filter_by_date)
     ]
     return df_producer, df_consumer
+
+
+# Output user matches to individual folder: /io/watertrading/match-detail/[userID]
+def OutputMatchesToUsers(matches_dir, output_dir):
+    """
+    Outputs match details to folders by UserID within directory output_dir
+    Inputs:
+    - matches_dir: match file name & directory
+    - output_dir: directory to output folder, defaults to match-detail if not specified
+    Outputs:
+    - None
+    """
+    
+    # Load data from JSON file
+    with open(matches_dir, 'r') as match_data:
+        match_data = json.load(match_data) # load data as dictionary
+
+    # Convert match data to dataframe
+    df_matches_s = pd.DataFrame(data=match_data["Supply"])
+    n_supply = len(match_data["Supply"])
+    for i in range(n_supply):
+        # Get User ID
+        UserID = match_data["Supply"][i]["UserID"]
+        # Get match details to export and convert to dataframe
+        df_match_details = pd.DataFrame.from_dict(df_matches_s.loc[i]["Matches"])
+        df_match_details.drop("Match Index", axis=1, inplace=True) # remove identifying information
+        # Check if output folder exists
+        if not os.path.exists(os.path.join(output_dir,UserID)):
+            os.mkdir(os.path.join(output_dir,UserID))
+        # Create file name from Match Index and export
+        output_file_name = os.path.join(output_dir,UserID,df_matches_s.loc[i]["Pair Index"]+".csv")
+        df_match_details.to_csv(output_file_name, index=False)
+
+    # Convert match data to dataframe
+    df_matches_d = pd.DataFrame(data=match_data["Demand"])
+    n_demand = len(match_data["Demand"])
+    for i in range(n_demand):
+        # Get User ID
+        UserID = match_data["Demand"][i]["UserID"]
+        # Get match details to export and convert to dataframe
+        df_match_details = pd.DataFrame.from_dict(df_matches_d.loc[i]["Matches"])
+        df_match_details.drop("Match Index", axis=1, inplace=True) # remove identifying information
+        # Check if output folder exists
+        if not os.path.exists(os.path.join(output_dir,UserID)):
+            os.mkdir(os.path.join(output_dir,UserID))
+        # Create file name from Match Index and export
+        output_file_name = os.path.join(output_dir,UserID,df_matches_d.loc[i]["Pair Index"]+".csv")
+        df_match_details.to_csv(output_file_name, index=False)
+
+    return None

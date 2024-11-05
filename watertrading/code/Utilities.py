@@ -348,6 +348,40 @@ def GenerateCombinationDataFrame(df1,df2,name,newname1,newname2):
 
 
 ##################################################
+def SupplierBidType(text):
+    """
+    A simple function that returns (-1) if text=="Willing to pay" and (1) if text=="Want to be paid"
+    Inputs:
+    - text: the content of df_producer["Bid Type"]
+    Outputs:
+    - Positive or negative one, depending on text.
+    """
+    if text == "Willing to pay":
+        return -1
+    elif text == "Want to be paid":
+        return 1
+    else:
+        raise Exception("Please verify that the contents of df_producer['Bid Type'] are correct.")
+
+
+##################################################
+def ConsumerBidType(text):
+    """
+    A simple function that returns (1) if text=="Willing to pay" and (-1) if text=="Want to be paid"
+    Inputs:
+    - text: the content of df_consumer["Bid Type"]
+    Outputs:
+    - Positive or negative one, depending on text.
+    """
+    if text == "Willing to pay":
+        return 1
+    elif text == "Want to be paid":
+        return -1
+    else:
+        raise Exception("Please verify that the contents of df_consumer['Bid Type'] are correct.")
+
+
+##################################################
 def SupplierBalanceType(value):
     """
     A simple function that returns "I will pay" if the price value is negative and "To be paid to me" if it is positive; the opposite behavior of ConsumerBalanceType
@@ -358,7 +392,7 @@ def SupplierBalanceType(value):
     """
     if value < 0:
         return "I will pay"
-    if value >= 0:
+    elif value >= 0:
         return "To be paid to me"
     else:
         raise Exception("Please ensure the value entered is a number.")
@@ -375,7 +409,7 @@ def ConsumerBalanceType(value):
     """
     if value < 0:
         return "I will pay"
-    if value >= 0:
+    elif value >= 0:
         return "To be paid to me"
     else:
         raise Exception("Please ensure the value entered is a number.")
@@ -392,7 +426,7 @@ def NetBalanceType(value):
     """
     if value < 0:
         return "I will pay"
-    if value >= 0:
+    elif value >= 0:
         return "To be paid to me"
     else:
         raise Exception("Please ensure the value entered is a number.")

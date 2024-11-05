@@ -16,6 +16,7 @@ from os.path import join
 # RUN OPTIMIZATION ALGORITHM
 def run_optimization_models(
     data_dir=getcwd(),
+    output_dir=join(getcwd(),"match-detail"),
     file_names={
         "requests":"_requests.json",
         "distance":"_distance.json",
@@ -76,6 +77,7 @@ def run_optimization_models(
         print("results are optimal")
         water_sharing = BuildModel.PostSolve(water_sharing)
         BuildModel.jsonize_outputs(water_sharing, matches_dir)
+        BuildModel.OutputMatchesToUsers(matches_dir,output_dir)
         #BuildModel.jsonize_profits(water_sharing, profits_dir)
         #BuildModel.DataViews(water_sharing, data_dir)
         #BuildModel.PostSolveViews(water_sharing, data_dir)
