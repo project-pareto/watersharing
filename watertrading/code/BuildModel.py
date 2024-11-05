@@ -33,7 +33,7 @@ from Utilities import (
     ConsumerBidType,
     SupplierBalanceType,
     ConsumerBalanceType,
-    NetBalanceType
+    NetBalanceType,
 )
 
 
@@ -100,9 +100,9 @@ def get_data(
 
         # Place producer and consumer data into dataframes
         df_producer = pd.DataFrame(data=request_data["Producers"])
-        df_producer.set_index("Index",inplace=True)
+        df_producer.set_index("Index", inplace=True)
         df_consumer = pd.DataFrame(data=request_data["Consumers"])
-        df_consumer.set_index("Index",inplace=True)
+        df_consumer.set_index("Index", inplace=True)
         df_restrictions = pd.DataFrame(data=request_data["Restrictions"])
         if filter_by_date is not None:
             FilterRequests(df_producer, df_consumer, filter_by_date)
@@ -125,12 +125,34 @@ def get_data(
     )
 
     # add unique keys for wellpads as userID-wellpadID-Lon-Lat (in case multiple users have duplicate names)
-    df_producer["WellpadUnique"] = df_producer.index +"|"+ df_producer["Wellpad"] +"|"+ df_producer["Longitude"].astype(str) +"|"+ df_producer["Latitude"].astype(str)
-    df_consumer["WellpadUnique"] = df_consumer.index +"|"+ df_consumer["Wellpad"] +"|"+ df_consumer["Longitude"].astype(str) +"|"+ df_consumer["Latitude"].astype(str)
+    df_producer["WellpadUnique"] = (
+        df_producer.index
+        + "|"
+        + df_producer["Wellpad"]
+        + "|"
+        + df_producer["Longitude"].astype(str)
+        + "|"
+        + df_producer["Latitude"].astype(str)
+    )
+    df_consumer["WellpadUnique"] = (
+        df_consumer.index
+        + "|"
+        + df_consumer["Wellpad"]
+        + "|"
+        + df_consumer["Longitude"].astype(str)
+        + "|"
+        + df_consumer["Latitude"].astype(str)
+    )
 
     # Process raw bids to get model bid conventions
-    df_producer["Supplier Bid (model)"] = df_producer["Bid Type"].apply(SupplierBidType)*df_producer["Supplier Bid (USD/bbl)"]
-    df_consumer["Consumer Bid (model)"] = df_consumer["Bid Type"].apply(ConsumerBidType)*df_consumer["Consumer Bid (USD/bbl)"]
+    df_producer["Supplier Bid (model)"] = (
+        df_producer["Bid Type"].apply(SupplierBidType)
+        * df_producer["Supplier Bid (USD/bbl)"]
+    )
+    df_consumer["Consumer Bid (model)"] = (
+        df_consumer["Bid Type"].apply(ConsumerBidType)
+        * df_consumer["Consumer Bid (USD/bbl)"]
+    )
 
     # Initialize dataframes ()
     df_distance = pd.DataFrame()
@@ -192,14 +214,8 @@ def create_model(
     }
 
     # DETERMINE DATE RANGE - assume need to optimize from the earliest date to the latest date in data
-    first_date = min(
-        df_producer["Start Date"]
-        .append(df_consumer["Start Date"])
-    )
-    last_date = max(
-        df_producer["End Date"]
-        .append(df_consumer["End Date"])
-    )
+    first_date = min(df_producer["Start Date"].append(df_consumer["Start Date"]))
+    last_date = max(df_producer["End Date"].append(df_consumer["End Date"]))
 
     # map dates to a dictionary with index
     time_list = pd.date_range(
@@ -210,7 +226,9 @@ def create_model(
     ]  # set of time index strings
     model.d_t = dict(zip(time_list, s_t))  # get time index from date_time value
     model.d_T = dict(zip(s_t, time_list))  # get date_time value from time index
-    model.d_T_ord = dict(zip(s_t, range(len(time_list))))  # get ordinate from time index
+    model.d_T_ord = dict(
+        zip(s_t, range(len(time_list)))
+    )  # get ordinate from time index
 
     # ------------------- SETS & PARAMETERS ----------------------- #
     # SETS
@@ -220,37 +238,31 @@ def create_model(
         doc="Time Periods",
     )
 
-    model.s_PI = Set(
-        initialize=model.df_producer.index,
-        doc="Producer entry index"
-    )
+    model.s_PI = Set(initialize=model.df_producer.index, doc="Producer entry index")
 
-    model.s_CI = Set(
-        initialize=model.df_consumer.index,
-        doc="Consumer entry index"
-    )
+    model.s_CI = Set(initialize=model.df_consumer.index, doc="Consumer entry index")
 
-    #[REMOVE]
-    #model.s_PP = Set(
+    # [REMOVE]
+    # model.s_PP = Set(
     #    initialize=model.df_producer["Wellpad"],
     #    doc="Producer wellpad"
-    #)
+    # )
 
-    #model.s_CP = Set(
+    # model.s_CP = Set(
     #    initialize=model.df_consumer["Wellpad"],
     #    doc="Consumer wellpad"
-    #)
+    # )
 
     model.s_PPUnique = Set(
         initialize=model.df_producer["WellpadUnique"],
         within=Any,
-        doc="Producer wellpad name; not necessarily unique"
+        doc="Producer wellpad name; not necessarily unique",
     )
 
     model.s_CPUnique = Set(
         initialize=model.df_consumer["WellpadUnique"],
         within=Any,
-        doc="Consumer wellpad name; not necessarily unique"
+        doc="Consumer wellpad name; not necessarily unique",
     )
 
     ### PARAMETERS
@@ -263,7 +275,9 @@ def create_model(
         doc="Map producer wellpad to the entry index",
     )
 
-    Producer_WellpadUnique = dict(zip(model.df_producer.index, model.df_producer.WellpadUnique))
+    Producer_WellpadUnique = dict(
+        zip(model.df_producer.index, model.df_producer.WellpadUnique)
+    )
     model.p_ProducerPadUnique = Param(
         model.s_PI,
         within=Any,  # to suppress Pyomo warning
@@ -272,7 +286,9 @@ def create_model(
     )
 
     # Add a reverse-lookup to the model; just to simplify finding the original name
-    Producer_WellMap = dict(zip(model.df_producer.WellpadUnique, model.df_producer.Wellpad))
+    Producer_WellMap = dict(
+        zip(model.df_producer.WellpadUnique, model.df_producer.Wellpad)
+    )
     model.p_ProducerWellMap = Param(
         model.s_PPUnique,
         within=Any,  # to suppress Pyomo warning
@@ -281,7 +297,9 @@ def create_model(
     )
 
     # Add a reverse-lookup unique wellpad to request ID
-    Producer_WellIDMap = dict(zip(model.df_producer.WellpadUnique, model.df_producer.index))
+    Producer_WellIDMap = dict(
+        zip(model.df_producer.WellpadUnique, model.df_producer.index)
+    )
     model.p_ProducerWellIDMap = Param(
         model.s_PPUnique,
         within=Any,  # to suppress Pyomo warning
@@ -289,7 +307,7 @@ def create_model(
         doc="Reverse-lookup from wellpad unique ID to request ID",
     )
 
-    Producer_Operator = dict(zip(model.df_producer.index,model.df_producer.Operator))
+    Producer_Operator = dict(zip(model.df_producer.index, model.df_producer.Operator))
     model.p_ProducerOperator = Param(
         model.s_PI,
         within=Any,  # to suppress Pyomo warning
@@ -324,10 +342,7 @@ def create_model(
     )
 
     Producer_Rate = dict(
-        zip(
-            model.df_producer.index,
-            model.df_producer["Supply Rate (bpd)"]
-        )
+        zip(model.df_producer.index, model.df_producer["Supply Rate (bpd)"])
     )
     model.p_ProducerRate = Param(
         model.s_PI,
@@ -338,10 +353,7 @@ def create_model(
     )
 
     Producer_Supply_Bid = dict(
-        zip(
-            model.df_producer.index,
-            model.df_producer["Supplier Bid (model)"]
-        )
+        zip(model.df_producer.index, model.df_producer["Supplier Bid (model)"])
     )
     model.p_ProducerSupplyBid = Param(
         model.s_PI,
@@ -353,10 +365,7 @@ def create_model(
 
     # Boolean values for 3rd party transport providers
     Producer_Trucks_Accepted = dict(
-        zip(
-            model.df_producer["WellpadUnique"],
-            model.df_producer["Trucks Accepted"]
-        )
+        zip(model.df_producer["WellpadUnique"], model.df_producer["Trucks Accepted"])
     )
     model.p_Producer_Trucks_Accepted = Param(
         model.s_PPUnique,
@@ -365,10 +374,7 @@ def create_model(
         doc="Producer accepts 3rd party trucks [Bool]",
     )
     Producer_Pipes_Accepted = dict(
-        zip(
-            model.df_producer["WellpadUnique"],
-            model.df_producer["Pipes Accepted"]
-        )
+        zip(model.df_producer["WellpadUnique"], model.df_producer["Pipes Accepted"])
     )
     model.p_Producer_Pipes_Accepted = Param(
         model.s_PPUnique,
@@ -378,10 +384,7 @@ def create_model(
     )
 
     ProducerMaxRangeTruck = dict(
-        zip(
-            model.df_producer.index,
-            model.df_producer["Truck Max Dist (mi)"]
-        )
+        zip(model.df_producer.index, model.df_producer["Truck Max Dist (mi)"])
     )
     model.p_ProducerMaxRangeTruck = Param(
         model.s_PI,
@@ -392,10 +395,7 @@ def create_model(
     )
 
     ProducerTransportCapacityTruck = dict(
-        zip(
-            model.df_producer.index,
-            model.df_producer["Trucking Capacity (bpd)"]
-        )
+        zip(model.df_producer.index, model.df_producer["Trucking Capacity (bpd)"])
     )
     model.p_ProducerTransportCapacityTruck = Param(
         model.s_PI,
@@ -406,10 +406,7 @@ def create_model(
     )
 
     ProducerTransportBidTruck = dict(
-        zip(
-            model.df_producer.index,
-            model.df_producer["Truck Transport Bid (USD/bbl)"]
-        )
+        zip(model.df_producer.index, model.df_producer["Truck Transport Bid (USD/bbl)"])
     )
     model.p_ProducerTransportBidTruck = Param(
         model.s_PI,
@@ -420,10 +417,7 @@ def create_model(
     )
 
     ProducerMaxRangePipel = dict(
-        zip(
-            model.df_producer.index,
-            model.df_producer["Pipe Max Dist (mi)"]
-        )
+        zip(model.df_producer.index, model.df_producer["Pipe Max Dist (mi)"])
     )
     model.p_ProducerMaxRangePipel = Param(
         model.s_PI,
@@ -434,10 +428,7 @@ def create_model(
     )
 
     ProducerTransportCapacityPipel = dict(
-        zip(
-            model.df_producer.index,
-            model.df_producer["Pipeline Capacity (bpd)"]
-        )
+        zip(model.df_producer.index, model.df_producer["Pipeline Capacity (bpd)"])
     )
     model.p_ProducerTransportCapacityPipel = Param(
         model.s_PI,
@@ -448,10 +439,7 @@ def create_model(
     )
 
     ProducerTransportBidPipel = dict(
-        zip(
-            model.df_producer.index,
-            model.df_producer["Pipe Transport Bid (USD/bbl)"]
-        )
+        zip(model.df_producer.index, model.df_producer["Pipe Transport Bid (USD/bbl)"])
     )
     model.p_ProducerTransportBidPipel = Param(
         model.s_PI,
@@ -470,7 +458,9 @@ def create_model(
         doc="Map consumer wellpad to the entry index",
     )
 
-    Consumer_WellpadUnique = dict(zip(model.df_consumer.index, model.df_consumer.WellpadUnique))
+    Consumer_WellpadUnique = dict(
+        zip(model.df_consumer.index, model.df_consumer.WellpadUnique)
+    )
     model.p_ConsumerPadUnique = Param(
         model.s_CI,
         within=Any,  # to suppress Pyomo warning
@@ -479,7 +469,9 @@ def create_model(
     )
 
     # Add a reverse-lookup to the model; just to simplify finding the original name
-    Consumer_WellMap = dict(zip(model.df_consumer.WellpadUnique, model.df_consumer.Wellpad))
+    Consumer_WellMap = dict(
+        zip(model.df_consumer.WellpadUnique, model.df_consumer.Wellpad)
+    )
     model.p_ConsumerWellMap = Param(
         model.s_CPUnique,
         within=Any,  # to suppress Pyomo warning
@@ -488,7 +480,9 @@ def create_model(
     )
 
     # Add a reverse-lookup unique wellpad to request ID
-    Consumer_WellIDMap = dict(zip(model.df_consumer.WellpadUnique, model.df_consumer.index))
+    Consumer_WellIDMap = dict(
+        zip(model.df_consumer.WellpadUnique, model.df_consumer.index)
+    )
     model.p_ConsumerWellIDMap = Param(
         model.s_CPUnique,
         within=Any,  # to suppress Pyomo warning
@@ -554,10 +548,7 @@ def create_model(
 
     # Boolean values for 3rd party transport providers
     Consumer_Trucks_Accepted = dict(
-        zip(
-            model.df_consumer["WellpadUnique"],
-            model.df_consumer["Trucks Accepted"]
-        )
+        zip(model.df_consumer["WellpadUnique"], model.df_consumer["Trucks Accepted"])
     )
     model.p_Consumer_Trucks_Accepted = Param(
         model.s_CPUnique,
@@ -566,10 +557,7 @@ def create_model(
         doc="Consumer accepts 3rd party trucks [Bool]",
     )
     Consumer_Pipes_Accepted = dict(
-        zip(
-            model.df_consumer["WellpadUnique"],
-            model.df_consumer["Pipes Accepted"]
-        )
+        zip(model.df_consumer["WellpadUnique"], model.df_consumer["Pipes Accepted"])
     )
     model.p_Consumer_Pipes_Accepted = Param(
         model.s_CPUnique,
@@ -579,10 +567,7 @@ def create_model(
     )
 
     ConsumerMaxRangeTruck = dict(
-        zip(
-            model.df_consumer.index,
-            model.df_consumer["Truck Max Dist (mi)"]
-        )
+        zip(model.df_consumer.index, model.df_consumer["Truck Max Dist (mi)"])
     )
     model.p_ConsumerMaxRangeTruck = Param(
         model.s_CI,
@@ -593,10 +578,7 @@ def create_model(
     )
 
     ConsumerTransportCapacityTruck = dict(
-        zip(
-            model.df_consumer.index,
-            model.df_consumer["Trucking Capacity (bpd)"]
-        )
+        zip(model.df_consumer.index, model.df_consumer["Trucking Capacity (bpd)"])
     )
     model.p_ConsumerTransportCapacityTruck = Param(
         model.s_CI,
@@ -607,10 +589,7 @@ def create_model(
     )
 
     ConsumerTransportBidTruck = dict(
-        zip(
-            model.df_consumer.index,
-            model.df_consumer["Truck Transport Bid (USD/bbl)"]
-        )
+        zip(model.df_consumer.index, model.df_consumer["Truck Transport Bid (USD/bbl)"])
     )
     model.p_ConsumerTransportBidTruck = Param(
         model.s_CI,
@@ -621,10 +600,7 @@ def create_model(
     )
 
     ConsumerMaxRangePipel = dict(
-        zip(
-            model.df_consumer.index,
-            model.df_consumer["Pipe Max Dist (mi)"]
-        )
+        zip(model.df_consumer.index, model.df_consumer["Pipe Max Dist (mi)"])
     )
     model.p_ConsumerMaxRangePipel = Param(
         model.s_CI,
@@ -635,10 +611,7 @@ def create_model(
     )
 
     ConsumerTransportCapacityPipel = dict(
-        zip(
-            model.df_consumer.index,
-            model.df_consumer["Pipeline Capacity (bpd)"]
-        )
+        zip(model.df_consumer.index, model.df_consumer["Pipeline Capacity (bpd)"])
     )
     model.p_ConsumerTransportCapacityPipel = Param(
         model.s_CI,
@@ -649,10 +622,7 @@ def create_model(
     )
 
     ConsumerTransportBidPipel = dict(
-        zip(
-            model.df_consumer.index,
-            model.df_consumer["Pipe Transport Bid (USD/bbl)"]
-        )
+        zip(model.df_consumer.index, model.df_consumer["Pipe Transport Bid (USD/bbl)"])
     )
     model.p_ConsumerTransportBidPipel = Param(
         model.s_CI,
@@ -753,16 +723,25 @@ def create_model(
     )
 
     # Set LP(pi,p,c,t) of arcs owned & operated by producers PI
-    L_LP_truck = [] # Create list of elements to initialize set s_LP_truck, comprises indices (pi,pp,cp,t)
-    L_LP_pipel = [] # Create list of elements to initialize set s_LP_pipel, comprises indices (pi,pp,cp,t)
+    L_LP_truck = (
+        []
+    )  # Create list of elements to initialize set s_LP_truck, comprises indices (pi,pp,cp,t)
+    L_LP_pipel = (
+        []
+    )  # Create list of elements to initialize set s_LP_pipel, comprises indices (pi,pp,cp,t)
     # Set LC(ci,p,c,t) of arcs owned & operated by consumers CI
-    L_LC_truck = [] # Create list of elements to initialize set s_LC_truck, comprises indices (ci,pp,cp,t)
-    L_LC_pipel = [] # Create list of elements to initialize set s_LC_pipel, comprises indices (ci,pp,cp,t)
+    L_LC_truck = (
+        []
+    )  # Create list of elements to initialize set s_LC_truck, comprises indices (ci,pp,cp,t)
+    L_LC_pipel = (
+        []
+    )  # Create list of elements to initialize set s_LC_pipel, comprises indices (ci,pp,cp,t)
     for pi in list(model.s_PI.ordered_data()):
         for ci in list(model.s_CI.ordered_data()):
             # LP_truck
             if (
-                model.p_ProducerPadUnique[pi] != model.p_ConsumerPadUnique[ci] # possible edge case
+                model.p_ProducerPadUnique[pi]
+                != model.p_ConsumerPadUnique[ci]  # possible edge case
                 and model.p_ArcDistance[
                     Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
@@ -770,13 +749,19 @@ def create_model(
             ):
                 for tp in model.s_T_pi[pi]:
                     for tc in model.s_T_ci[ci]:
-                        if tp == tc: # i.e., if any times overlap
+                        if tp == tc:  # i.e., if any times overlap
                             L_LP_truck.append(
-                                (pi, Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci], tp)
+                                (
+                                    pi,
+                                    Producer_WellpadUnique[pi],
+                                    Consumer_WellpadUnique[ci],
+                                    tp,
+                                )
                             )
             # LP_pipel
             if (
-                model.p_ProducerPadUnique[pi] != model.p_ConsumerPadUnique[ci] # possible edge case
+                model.p_ProducerPadUnique[pi]
+                != model.p_ConsumerPadUnique[ci]  # possible edge case
                 and model.p_ArcDistance[
                     Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
@@ -784,13 +769,19 @@ def create_model(
             ):
                 for tp in model.s_T_pi[pi]:
                     for tc in model.s_T_ci[ci]:
-                        if tp == tc: # i.e., if any times overlap
+                        if tp == tc:  # i.e., if any times overlap
                             L_LP_pipel.append(
-                                (pi, Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci], tp)
+                                (
+                                    pi,
+                                    Producer_WellpadUnique[pi],
+                                    Consumer_WellpadUnique[ci],
+                                    tp,
+                                )
                             )
             # LC_truck
             if (
-                model.p_ProducerPadUnique[pi] != model.p_ConsumerPadUnique[ci] # possible edge case
+                model.p_ProducerPadUnique[pi]
+                != model.p_ConsumerPadUnique[ci]  # possible edge case
                 and model.p_ArcDistance[
                     Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
@@ -798,13 +789,19 @@ def create_model(
             ):
                 for tp in model.s_T_pi[pi]:
                     for tc in model.s_T_ci[ci]:
-                        if tp == tc: # i.e., if any times overlap
+                        if tp == tc:  # i.e., if any times overlap
                             L_LC_truck.append(
-                                (ci, Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci], tc)
+                                (
+                                    ci,
+                                    Producer_WellpadUnique[pi],
+                                    Consumer_WellpadUnique[ci],
+                                    tc,
+                                )
                             )
             # LC_pipel
             if (
-                model.p_ProducerPadUnique[pi] != model.p_ConsumerPadUnique[ci] # possible edge case
+                model.p_ProducerPadUnique[pi]
+                != model.p_ConsumerPadUnique[ci]  # possible edge case
                 and model.p_ArcDistance[
                     Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
@@ -812,20 +809,33 @@ def create_model(
             ):
                 for tp in model.s_T_pi[pi]:
                     for tc in model.s_T_ci[ci]:
-                        if tp == tc: # i.e., if any times overlap
+                        if tp == tc:  # i.e., if any times overlap
                             L_LC_pipel.append(
-                                (ci, Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci], tc)
+                                (
+                                    ci,
+                                    Producer_WellpadUnique[pi],
+                                    Consumer_WellpadUnique[ci],
+                                    tc,
+                                )
                             )
-    L_LP_truck = list(set(L_LP_truck)) # remove duplciates
-    L_LP_pipel = list(set(L_LP_pipel)) # remove duplciates
-    L_LC_truck = list(set(L_LC_truck)) # remove duplciates
-    L_LC_pipel = list(set(L_LC_pipel)) # remove duplciates
-    model.s_LP_truck = Set(dimen=4, initialize=L_LP_truck, doc="Valid Producer Trucking Arcs")
-    model.s_LP_pipel = Set(dimen=4, initialize=L_LP_pipel, doc="Valid Producer Pipeline Arcs")
-    model.s_LC_truck = Set(dimen=4, initialize=L_LC_truck, doc="Valid Consumer Trucking Arcs")
-    model.s_LC_pipel = Set(dimen=4, initialize=L_LC_pipel, doc="Valid Consumer Pipeline Arcs")
+    L_LP_truck = list(set(L_LP_truck))  # remove duplciates
+    L_LP_pipel = list(set(L_LP_pipel))  # remove duplciates
+    L_LC_truck = list(set(L_LC_truck))  # remove duplciates
+    L_LC_pipel = list(set(L_LC_pipel))  # remove duplciates
+    model.s_LP_truck = Set(
+        dimen=4, initialize=L_LP_truck, doc="Valid Producer Trucking Arcs"
+    )
+    model.s_LP_pipel = Set(
+        dimen=4, initialize=L_LP_pipel, doc="Valid Producer Pipeline Arcs"
+    )
+    model.s_LC_truck = Set(
+        dimen=4, initialize=L_LC_truck, doc="Valid Consumer Trucking Arcs"
+    )
+    model.s_LC_pipel = Set(
+        dimen=4, initialize=L_LC_pipel, doc="Valid Consumer Pipeline Arcs"
+    )
     print("Primary arc sets constructed")
-    
+
     # Sets for arcs inbound on (cp,t)
     def s_LP_truck_in_ct_INIT(model, cp, tc):
         elems = []
@@ -833,6 +843,7 @@ def create_model(
             if c == cp and t == tc and model.p_Consumer_Trucks_Accepted[cp]:
                 elems.append((pi, p, c, t))
         return elems
+
     model.s_LP_truck_in_ct = Set(
         model.s_CPUnique,
         model.s_T,
@@ -847,6 +858,7 @@ def create_model(
             if c == cp and t == tc and model.p_Consumer_Pipes_Accepted[cp]:
                 elems.append((pi, p, c, t))
         return elems
+
     model.s_LP_pipel_in_ct = Set(
         model.s_CPUnique,
         model.s_T,
@@ -861,6 +873,7 @@ def create_model(
             if c == cp and t == tc:
                 elems.append((ci, p, c, t))
         return elems
+
     model.s_LC_truck_in_ct = Set(
         model.s_CPUnique,
         model.s_T,
@@ -875,6 +888,7 @@ def create_model(
             if c == cp and t == tc:
                 elems.append((ci, p, c, t))
         return elems
+
     model.s_LC_pipel_in_ct = Set(
         model.s_CPUnique,
         model.s_T,
@@ -891,6 +905,7 @@ def create_model(
             if p == pp and t == tp:
                 elems.append((pi, p, c, t))
         return elems
+
     model.s_LP_truck_out_pt = Set(
         model.s_PPUnique,
         model.s_T,
@@ -905,6 +920,7 @@ def create_model(
             if p == pp and t == tp:
                 elems.append((pi, p, c, t))
         return elems
+
     model.s_LP_pipel_out_pt = Set(
         model.s_PPUnique,
         model.s_T,
@@ -919,6 +935,7 @@ def create_model(
             if p == pp and t == tp and model.p_Producer_Trucks_Accepted[pp]:
                 elems.append((ci, p, c, t))
         return elems
+
     model.s_LC_truck_out_pt = Set(
         model.s_PPUnique,
         model.s_T,
@@ -933,6 +950,7 @@ def create_model(
             if p == pp and t == tp and model.p_Producer_Pipes_Accepted[pp]:
                 elems.append((ci, p, c, t))
         return elems
+
     model.s_LC_pipel_out_pt = Set(
         model.s_PPUnique,
         model.s_T,
@@ -949,6 +967,7 @@ def create_model(
             if model.p_ProducerPadUnique[pi] == p:
                 pies.append(pi)
         return pies
+
     model.ProducerNodeMap = Set(
         model.s_PPUnique,
         dimen=1,
@@ -1007,7 +1026,7 @@ def create_model(
     print("All sets complete")
 
     ### ---------------------- VARIABLES & BOUNDS ---------------------- #
-    # Variables for water volumes; note: the F in v_F indicates transport (flow) volume, v_FP_truck indicates producer trucking (i.e., v_(node_i,node_j,producer_index)) while v_FC_pipel indicates consumer piping (i.e., v_(node_i,node_j,consumer_index)) 
+    # Variables for water volumes; note: the F in v_F indicates transport (flow) volume, v_FP_truck indicates producer trucking (i.e., v_(node_i,node_j,producer_index)) while v_FC_pipel indicates consumer piping (i.e., v_(node_i,node_j,consumer_index))
     model.v_FP_truck = Var(
         model.s_LP_truck,
         within=NonNegativeReals,
@@ -1167,16 +1186,28 @@ def create_model(
             expr = -sum(model.v_Demand[ci, t] for ci in model.ConsumerNodeTimeMap[c, t])
 
             if bool(model.s_LP_truck_in_ct[c, t]):
-                expr += sum(model.v_FP_truck[pi, pa, ca, t] for (pi, pa, ca, t) in model.s_LP_truck_in_ct[c, t])
+                expr += sum(
+                    model.v_FP_truck[pi, pa, ca, t]
+                    for (pi, pa, ca, t) in model.s_LP_truck_in_ct[c, t]
+                )
 
             if bool(model.s_LP_pipel_in_ct[c, t]):
-                expr += sum(model.v_FP_pipel[pi, pa, ca, t] for (pi, pa, ca, t) in model.s_LP_pipel_in_ct[c, t])
+                expr += sum(
+                    model.v_FP_pipel[pi, pa, ca, t]
+                    for (pi, pa, ca, t) in model.s_LP_pipel_in_ct[c, t]
+                )
 
             if bool(model.s_LC_truck_in_ct[c, t]):
-                expr += sum(model.v_FC_truck[ci, pa, ca, t] for (ci, pa, ca, t) in model.s_LC_truck_in_ct[c, t])
+                expr += sum(
+                    model.v_FC_truck[ci, pa, ca, t]
+                    for (ci, pa, ca, t) in model.s_LC_truck_in_ct[c, t]
+                )
 
             if bool(model.s_LC_pipel_in_ct[c, t]):
-                expr += sum(model.v_FC_pipel[ci, pa, ca, t] for (ci, pa, ca, t) in model.s_LC_pipel_in_ct[c, t])
+                expr += sum(
+                    model.v_FC_pipel[ci, pa, ca, t]
+                    for (ci, pa, ca, t) in model.s_LC_pipel_in_ct[c, t]
+                )
 
             return expr == 0
         else:
@@ -1195,16 +1226,28 @@ def create_model(
             expr = sum(model.v_Supply[pi, t] for pi in model.ProducerNodeTimeMap[p, t])
 
             if bool(model.s_LP_truck_out_pt[p, t]):
-                expr += -sum(model.v_FP_truck[pi, pa, ca, t] for (pi, pa, ca, t) in model.s_LP_truck_out_pt[p, t])
+                expr += -sum(
+                    model.v_FP_truck[pi, pa, ca, t]
+                    for (pi, pa, ca, t) in model.s_LP_truck_out_pt[p, t]
+                )
 
             if bool(model.s_LP_pipel_out_pt[p, t]):
-                expr += -sum(model.v_FP_pipel[pi, pa, ca, t] for (pi, pa, ca, t) in model.s_LP_pipel_out_pt[p, t])
+                expr += -sum(
+                    model.v_FP_pipel[pi, pa, ca, t]
+                    for (pi, pa, ca, t) in model.s_LP_pipel_out_pt[p, t]
+                )
 
             if bool(model.s_LC_truck_out_pt[p, t]):
-                expr += -sum(model.v_FC_truck[ci, pa, ca, t] for (ci, pa, ca, t) in model.s_LC_truck_out_pt[p, t])
+                expr += -sum(
+                    model.v_FC_truck[ci, pa, ca, t]
+                    for (ci, pa, ca, t) in model.s_LC_truck_out_pt[p, t]
+                )
 
             if bool(model.s_LC_pipel_out_pt[p, t]):
-                expr += -sum(model.v_FC_pipel[ci, pa, ca, t] for (ci, pa, ca, t) in model.s_LC_pipel_out_pt[p, t])
+                expr += -sum(
+                    model.v_FC_pipel[ci, pa, ca, t]
+                    for (ci, pa, ca, t) in model.s_LC_pipel_out_pt[p, t]
+                )
 
             return expr == 0
         else:
@@ -1342,12 +1385,18 @@ def create_model(
 
 
 # Create output dataframe
-def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_qual_val="All specifications met"):
+def jsonize_outputs(
+    model,
+    matches_dir,
+    match_threshold=0.0,
+    na_string="-",
+    temp_qual_val="All specifications met",
+):
     # Convert output variables to DataFrames for filtering
     df_FP_truck = pd.DataFrame(
         {
             "Supplier Index": key[0],
-            "Supplier Wellpad":key[1],
+            "Supplier Wellpad": key[1],
             "Consumer Wellpad": key[2],
             "Date Index": key[3],
             "Rate": value(model.v_FP_truck[key]),
@@ -1358,7 +1407,7 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
     df_FP_pipel = pd.DataFrame(
         {
             "Supplier Index": key[0],
-            "Supplier Wellpad":key[1],
+            "Supplier Wellpad": key[1],
             "Consumer Wellpad": key[2],
             "Date Index": key[3],
             "Rate": value(model.v_FP_pipel[key]),
@@ -1369,7 +1418,7 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
     df_FC_truck = pd.DataFrame(
         {
             "Consumer Index": key[0],
-            "Supplier Wellpad":key[1],
+            "Supplier Wellpad": key[1],
             "Consumer Wellpad": key[2],
             "Date Index": key[3],
             "Rate": value(model.v_FC_truck[key]),
@@ -1380,7 +1429,7 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
     df_FC_pipel = pd.DataFrame(
         {
             "Consumer Index": key[0],
-            "Supplier Wellpad":key[1],
+            "Supplier Wellpad": key[1],
             "Consumer Wellpad": key[2],
             "Date Index": key[3],
             "Rate": value(model.v_FC_pipel[key]),
@@ -1399,7 +1448,9 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
         for key in model.v_Supply
         if value(model.v_Supply[key]) > match_threshold
     )
-    df_v_Supply_totals = pd.pivot_table(df_v_Supply, values="Rate", index="Supplier Index", columns=None, aggfunc="sum")
+    df_v_Supply_totals = pd.pivot_table(
+        df_v_Supply, values="Rate", index="Supplier Index", columns=None, aggfunc="sum"
+    )
     df_v_Demand = pd.DataFrame(
         {
             "Consumer Index": key[0],
@@ -1411,7 +1462,9 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
         for key in model.v_Demand
         if value(model.v_Demand[key]) > 0
     )
-    df_v_Demand_totals = pd.pivot_table(df_v_Demand, values="Rate", index="Consumer Index", columns=None, aggfunc="sum")
+    df_v_Demand_totals = pd.pivot_table(
+        df_v_Demand, values="Rate", index="Consumer Index", columns=None, aggfunc="sum"
+    )
 
     # If both supply and demand are empty (either they both are, or neither will be, actually) end here; the market is dry.
     if df_v_Supply.empty and df_v_Demand.empty:
@@ -1424,307 +1477,571 @@ def jsonize_outputs(model, matches_dir, match_threshold=0.0,na_string="-",temp_q
 
     # Iterate over requests, identify matches, and add lines to output supply match dataframe
     d_supply_match = {
-        "Index":[],
-        "Pair Index":[],
-        "Operator":[],
-        "UserID":[],
-        "Wellpad":[],
-        "Longitude":[],
-        "Latitude":[],
-        "Start Date":[],
-        "End Date":[],
-        "Supply Rate (bpd)":[],
-        "Supplier Bid (USD/bbl)":[],
-        "Bid Type":[],
-        "Trucks Accepted":[],
-        "Pipes Accepted":[],
-        "Truck Max Dist (mi)":[],
-        "Trucking Capacity (bpd)":[],
-        "Truck Transport Bid (USD/bbl)":[],
-        "Pipe Max Dist (mi)":[],
-        "Pipeline Capacity (bpd)":[],
-        "Pipe Transport Bid (USD/bbl)":[],
-        "Matches":[]
+        "Index": [],
+        "Pair Index": [],
+        "Operator": [],
+        "UserID": [],
+        "Wellpad": [],
+        "Longitude": [],
+        "Latitude": [],
+        "Start Date": [],
+        "End Date": [],
+        "Supply Rate (bpd)": [],
+        "Supplier Bid (USD/bbl)": [],
+        "Bid Type": [],
+        "Trucks Accepted": [],
+        "Pipes Accepted": [],
+        "Truck Max Dist (mi)": [],
+        "Trucking Capacity (bpd)": [],
+        "Truck Transport Bid (USD/bbl)": [],
+        "Pipe Max Dist (mi)": [],
+        "Pipeline Capacity (bpd)": [],
+        "Pipe Transport Bid (USD/bbl)": [],
+        "Matches": [],
     }
 
     d_demand_match = {
-        "Index":[],
-        "Pair Index":[],
-        "Operator":[],
-        "UserID":[],
-        "Wellpad":[],
-        "Longitude":[],
-        "Latitude":[],
-        "Start Date":[],
-        "End Date":[],
-        "Demand Rate (bpd)":[],
-        "Consumer Bid (USD/bbl)":[],
-        "Bid Type":[],
-        "Trucks Accepted":[],
-        "Pipes Accepted":[],
-        "Truck Max Dist (mi)":[],
-        "Trucking Capacity (bpd)":[],
-        "Truck Transport Bid (USD/bbl)":[],
-        "Pipe Max Dist (mi)":[],
-        "Pipeline Capacity (bpd)":[],
-        "Pipe Transport Bid (USD/bbl)":[],
-        "Matches":[]
+        "Index": [],
+        "Pair Index": [],
+        "Operator": [],
+        "UserID": [],
+        "Wellpad": [],
+        "Longitude": [],
+        "Latitude": [],
+        "Start Date": [],
+        "End Date": [],
+        "Demand Rate (bpd)": [],
+        "Consumer Bid (USD/bbl)": [],
+        "Bid Type": [],
+        "Trucks Accepted": [],
+        "Pipes Accepted": [],
+        "Truck Max Dist (mi)": [],
+        "Trucking Capacity (bpd)": [],
+        "Truck Transport Bid (USD/bbl)": [],
+        "Pipe Max Dist (mi)": [],
+        "Pipeline Capacity (bpd)": [],
+        "Pipe Transport Bid (USD/bbl)": [],
+        "Matches": [],
     }
 
     # iterate over supplier requests
     for pi in model.s_PI:
         # for future reference: the monstrosity below checks whether any of the elements in v_Supply_totals' index column are the element in question. The element must be in square brackets, and the axis input to any() is required to return a scalar boolean value.
-        if df_v_Supply_totals.index.isin([pi]).any(axis=None) and df_v_Supply_totals.loc[pi,"Rate"] > 0: # there's a match for this request
+        if (
+            df_v_Supply_totals.index.isin([pi]).any(axis=None)
+            and df_v_Supply_totals.loc[pi, "Rate"] > 0
+        ):  # there's a match for this request
             p = model.p_ProducerPadUnique[pi]
             for c in model.s_CPUnique:
                 # Filter all the matches to consumer pads c; these may be empty (v_Supply(pi)>0 does not imply every c will be matched)
-                df_FP_truck_filter = df_FP_truck.loc[(df_FP_truck["Supplier Index"] == pi) & (df_FP_truck["Consumer Wellpad"] == c)]
-                df_FP_pipel_filter = df_FP_pipel.loc[(df_FP_pipel["Supplier Index"] == pi) & (df_FP_pipel["Consumer Wellpad"] == c)]
-                #TODO: check to see if this won't double count entries; might need to filter using a set; p might not be associated with this pi
-                df_FC_truck_filter = df_FC_truck.loc[(df_FC_truck["Supplier Wellpad"] == p) & (df_FC_truck["Consumer Wellpad"] == c)]
-                df_FC_pipel_filter = df_FC_pipel.loc[(df_FC_pipel["Supplier Wellpad"] == p) & (df_FC_pipel["Consumer Wellpad"] == c)]
+                df_FP_truck_filter = df_FP_truck.loc[
+                    (df_FP_truck["Supplier Index"] == pi)
+                    & (df_FP_truck["Consumer Wellpad"] == c)
+                ]
+                df_FP_pipel_filter = df_FP_pipel.loc[
+                    (df_FP_pipel["Supplier Index"] == pi)
+                    & (df_FP_pipel["Consumer Wellpad"] == c)
+                ]
+                # TODO: check to see if this won't double count entries; might need to filter using a set; p might not be associated with this pi
+                df_FC_truck_filter = df_FC_truck.loc[
+                    (df_FC_truck["Supplier Wellpad"] == p)
+                    & (df_FC_truck["Consumer Wellpad"] == c)
+                ]
+                df_FC_pipel_filter = df_FC_pipel.loc[
+                    (df_FC_pipel["Supplier Wellpad"] == p)
+                    & (df_FC_pipel["Consumer Wellpad"] == c)
+                ]
                 # Is there a match with this element, c?
-                if not (df_FP_truck_filter.empty and df_FP_pipel_filter.empty and df_FC_truck_filter.empty and df_FC_pipel_filter.empty): # there's a match with this destination
+                if not (
+                    df_FP_truck_filter.empty
+                    and df_FP_pipel_filter.empty
+                    and df_FC_truck_filter.empty
+                    and df_FC_pipel_filter.empty
+                ):  # there's a match with this destination
                     # populate main-level match detail dictionary
                     d_supply_match["Index"].append(pi)
-                    d_supply_match["Pair Index"].append(pi+"-"+model.p_ConsumerWellIDMap[c])
-                    d_supply_match["Operator"].append(model.df_producer.loc[pi,"Operator"])
-                    d_supply_match["UserID"].append(model.df_producer.loc[pi,"UserID"])
-                    d_supply_match["Wellpad"].append(model.df_producer.loc[pi,"Wellpad"])
-                    d_supply_match["Longitude"].append(model.df_producer.loc[pi,"Longitude"])
-                    d_supply_match["Latitude"].append(model.df_producer.loc[pi,"Latitude"])
-                    d_supply_match["Start Date"].append(model.df_producer.loc[pi,"Start Date"])
-                    d_supply_match["End Date"].append(model.df_producer.loc[pi,"End Date"])
-                    d_supply_match["Supply Rate (bpd)"].append(model.df_producer.loc[pi,"Supply Rate (bpd)"])
-                    d_supply_match["Supplier Bid (USD/bbl)"].append(model.df_producer.loc[pi,"Supplier Bid (USD/bbl)"])
-                    d_supply_match["Bid Type"].append(model.df_producer.loc[pi,"Bid Type"])
-                    d_supply_match["Trucks Accepted"].append(model.df_producer.loc[pi,"Trucks Accepted"])
-                    d_supply_match["Pipes Accepted"].append(model.df_producer.loc[pi,"Pipes Accepted"])
-                    d_supply_match["Truck Max Dist (mi)"].append(model.df_producer.loc[pi,"Truck Max Dist (mi)"])
-                    d_supply_match["Trucking Capacity (bpd)"].append(model.df_producer.loc[pi,"Trucking Capacity (bpd)"])
-                    d_supply_match["Truck Transport Bid (USD/bbl)"].append(model.df_producer.loc[pi,"Truck Transport Bid (USD/bbl)"])
-                    d_supply_match["Pipe Max Dist (mi)"].append(model.df_producer.loc[pi,"Pipe Max Dist (mi)"])
-                    d_supply_match["Pipeline Capacity (bpd)"].append(model.df_producer.loc[pi,"Pipeline Capacity (bpd)"])
-                    d_supply_match["Pipe Transport Bid (USD/bbl)"].append(model.df_producer.loc[pi,"Pipe Transport Bid (USD/bbl)"])
+                    d_supply_match["Pair Index"].append(
+                        pi + "-" + model.p_ConsumerWellIDMap[c]
+                    )
+                    d_supply_match["Operator"].append(
+                        model.df_producer.loc[pi, "Operator"]
+                    )
+                    d_supply_match["UserID"].append(model.df_producer.loc[pi, "UserID"])
+                    d_supply_match["Wellpad"].append(
+                        model.df_producer.loc[pi, "Wellpad"]
+                    )
+                    d_supply_match["Longitude"].append(
+                        model.df_producer.loc[pi, "Longitude"]
+                    )
+                    d_supply_match["Latitude"].append(
+                        model.df_producer.loc[pi, "Latitude"]
+                    )
+                    d_supply_match["Start Date"].append(
+                        model.df_producer.loc[pi, "Start Date"]
+                    )
+                    d_supply_match["End Date"].append(
+                        model.df_producer.loc[pi, "End Date"]
+                    )
+                    d_supply_match["Supply Rate (bpd)"].append(
+                        model.df_producer.loc[pi, "Supply Rate (bpd)"]
+                    )
+                    d_supply_match["Supplier Bid (USD/bbl)"].append(
+                        model.df_producer.loc[pi, "Supplier Bid (USD/bbl)"]
+                    )
+                    d_supply_match["Bid Type"].append(
+                        model.df_producer.loc[pi, "Bid Type"]
+                    )
+                    d_supply_match["Trucks Accepted"].append(
+                        model.df_producer.loc[pi, "Trucks Accepted"]
+                    )
+                    d_supply_match["Pipes Accepted"].append(
+                        model.df_producer.loc[pi, "Pipes Accepted"]
+                    )
+                    d_supply_match["Truck Max Dist (mi)"].append(
+                        model.df_producer.loc[pi, "Truck Max Dist (mi)"]
+                    )
+                    d_supply_match["Trucking Capacity (bpd)"].append(
+                        model.df_producer.loc[pi, "Trucking Capacity (bpd)"]
+                    )
+                    d_supply_match["Truck Transport Bid (USD/bbl)"].append(
+                        model.df_producer.loc[pi, "Truck Transport Bid (USD/bbl)"]
+                    )
+                    d_supply_match["Pipe Max Dist (mi)"].append(
+                        model.df_producer.loc[pi, "Pipe Max Dist (mi)"]
+                    )
+                    d_supply_match["Pipeline Capacity (bpd)"].append(
+                        model.df_producer.loc[pi, "Pipeline Capacity (bpd)"]
+                    )
+                    d_supply_match["Pipe Transport Bid (USD/bbl)"].append(
+                        model.df_producer.loc[pi, "Pipe Transport Bid (USD/bbl)"]
+                    )
                     # create sub-level match detail dictionary
                     d_match_detail = {
-                        "Match Index":[],
-                        "Match Date Index":[],
-                        "Match Date":[],
-                        "Match Volume":[],
-                        "Match Price":[],
-                        "Match Value":[],
-                        "Match Balance Type":[],
-                        "Providing Trucking Volume":[],
-                        "Providing Trucking Price":[],
-                        "Providing Trucking Value":[],
-                        "Providing Piping Volume":[],
-                        "Providing Piping Price":[],
-                        "Providing Piping Value":[],
-                        "Purchasing Trucking Volume":[],
-                        "Purchasing Trucking Price":[],
-                        "Purchasing Trucking Value":[],
-                        "Purchasing Piping Volume":[],
-                        "Purchasing Piping Price":[],
-                        "Purchasing Piping Value":[],
-                        "Net Value":[],
-                        "Net Balance Type":[],
-                        "Quality":[]
+                        "Match Index": [],
+                        "Match Date Index": [],
+                        "Match Date": [],
+                        "Match Volume": [],
+                        "Match Price": [],
+                        "Match Value": [],
+                        "Match Balance Type": [],
+                        "Providing Trucking Volume": [],
+                        "Providing Trucking Price": [],
+                        "Providing Trucking Value": [],
+                        "Providing Piping Volume": [],
+                        "Providing Piping Price": [],
+                        "Providing Piping Value": [],
+                        "Purchasing Trucking Volume": [],
+                        "Purchasing Trucking Price": [],
+                        "Purchasing Trucking Value": [],
+                        "Purchasing Piping Volume": [],
+                        "Purchasing Piping Price": [],
+                        "Purchasing Piping Value": [],
+                        "Net Value": [],
+                        "Net Balance Type": [],
+                        "Quality": [],
                     }
                     # Iterate through the possible time points and find matches
                     for t in model.s_T_pi[pi]:
-                        #if value(model.v_Supply[pi,t]) > match_threshold: # there's a match for this request at this time
-                        df_FP_truck_filter_t = df_FP_truck.loc[(df_FP_truck["Supplier Index"] == pi) & (df_FP_truck["Consumer Wellpad"] == c) & (df_FP_truck["Date Index"] == t)]
-                        df_FP_pipel_filter_t = df_FP_pipel.loc[(df_FP_pipel["Supplier Index"] == pi) & (df_FP_pipel["Consumer Wellpad"] == c) & (df_FP_pipel["Date Index"] == t)]
-                        #TODO: check to see if this won't double count entries; might need to filter using a set; p might not be associated with this pi
-                        df_FC_truck_filter_t = df_FC_truck.loc[(df_FC_truck["Supplier Wellpad"] == p) & (df_FC_truck["Consumer Wellpad"] == c) & (df_FC_truck["Date Index"] == t)]
-                        df_FC_pipel_filter_t = df_FC_pipel.loc[(df_FC_pipel["Supplier Wellpad"] == p) & (df_FC_pipel["Consumer Wellpad"] == c) & (df_FC_pipel["Date Index"] == t)]
+                        # if value(model.v_Supply[pi,t]) > match_threshold: # there's a match for this request at this time
+                        df_FP_truck_filter_t = df_FP_truck.loc[
+                            (df_FP_truck["Supplier Index"] == pi)
+                            & (df_FP_truck["Consumer Wellpad"] == c)
+                            & (df_FP_truck["Date Index"] == t)
+                        ]
+                        df_FP_pipel_filter_t = df_FP_pipel.loc[
+                            (df_FP_pipel["Supplier Index"] == pi)
+                            & (df_FP_pipel["Consumer Wellpad"] == c)
+                            & (df_FP_pipel["Date Index"] == t)
+                        ]
+                        # TODO: check to see if this won't double count entries; might need to filter using a set; p might not be associated with this pi
+                        df_FC_truck_filter_t = df_FC_truck.loc[
+                            (df_FC_truck["Supplier Wellpad"] == p)
+                            & (df_FC_truck["Consumer Wellpad"] == c)
+                            & (df_FC_truck["Date Index"] == t)
+                        ]
+                        df_FC_pipel_filter_t = df_FC_pipel.loc[
+                            (df_FC_pipel["Supplier Wellpad"] == p)
+                            & (df_FC_pipel["Consumer Wellpad"] == c)
+                            & (df_FC_pipel["Date Index"] == t)
+                        ]
                         # Is there a match with this element, c, at this time, t?
-                        if not (df_FP_truck_filter_t.empty and df_FP_pipel_filter_t.empty and df_FC_truck_filter_t.empty and df_FC_pipel_filter_t.empty):
+                        if not (
+                            df_FP_truck_filter_t.empty
+                            and df_FP_pipel_filter_t.empty
+                            and df_FC_truck_filter_t.empty
+                            and df_FC_pipel_filter_t.empty
+                        ):
                             # calculations
                             FP_truck = df_FP_truck_filter_t.Rate.sum()
                             FP_pipel = df_FP_pipel_filter_t.Rate.sum()
                             FC_truck = df_FC_truck_filter_t.Rate.sum()
                             FC_pipel = df_FC_pipel_filter_t.Rate.sum()
-                            match_volume = FP_truck+FP_pipel+FC_truck+FC_pipel
-                            match_price = value(model.p_ProducerNodalPrice[p,t])
-                            match_value = match_volume*match_price
-                            match_net_value = match_value + (FP_truck+FP_pipel-FC_truck-FC_pipel)*value(model.p_TransportPrice[p,c,t])
+                            match_volume = FP_truck + FP_pipel + FC_truck + FC_pipel
+                            match_price = value(model.p_ProducerNodalPrice[p, t])
+                            match_value = match_volume * match_price
+                            match_net_value = match_value + (
+                                FP_truck + FP_pipel - FC_truck - FC_pipel
+                            ) * value(model.p_TransportPrice[p, c, t])
                             # record entries
-                            d_match_detail["Match Index"].append(pi+"-"+c+"-"+t)
+                            d_match_detail["Match Index"].append(pi + "-" + c + "-" + t)
                             d_match_detail["Match Date Index"].append(t)
                             d_match_detail["Match Date"].append(model.d_T[t])
                             d_match_detail["Match Volume"].append(match_volume)
                             d_match_detail["Match Price"].append(match_price)
                             d_match_detail["Match Value"].append(match_value)
-                            #TODO: make match values absolute; for now will use negatives for troubleshooting
-                            d_match_detail["Match Balance Type"].append(SupplierBalanceType(match_value))
-                            if FP_truck > 0: # NOTE: Providing and purchasing transport are relative to the user
-                                #TODO: make transport values absolute; for now negatives will help with troubleshooting
-                                d_match_detail["Providing Trucking Volume"].append(FP_truck)
-                                d_match_detail["Providing Trucking Price"].append(value(model.p_TransportPrice[p,c,t]))
-                                d_match_detail["Providing Trucking Value"].append(FP_truck*value(model.p_TransportPrice[p,c,t]))
+                            # TODO: make match values absolute; for now will use negatives for troubleshooting
+                            d_match_detail["Match Balance Type"].append(
+                                SupplierBalanceType(match_value)
+                            )
+                            if (
+                                FP_truck > 0
+                            ):  # NOTE: Providing and purchasing transport are relative to the user
+                                # TODO: make transport values absolute; for now negatives will help with troubleshooting
+                                d_match_detail["Providing Trucking Volume"].append(
+                                    FP_truck
+                                )
+                                d_match_detail["Providing Trucking Price"].append(
+                                    value(model.p_TransportPrice[p, c, t])
+                                )
+                                d_match_detail["Providing Trucking Value"].append(
+                                    FP_truck * value(model.p_TransportPrice[p, c, t])
+                                )
                             else:
-                                d_match_detail["Providing Trucking Volume"].append(na_string)
-                                d_match_detail["Providing Trucking Price"].append(na_string)
-                                d_match_detail["Providing Trucking Value"].append(na_string)
+                                d_match_detail["Providing Trucking Volume"].append(
+                                    na_string
+                                )
+                                d_match_detail["Providing Trucking Price"].append(
+                                    na_string
+                                )
+                                d_match_detail["Providing Trucking Value"].append(
+                                    na_string
+                                )
                             if FP_pipel > 0:
-                                d_match_detail["Providing Piping Volume"].append(FP_pipel)
-                                d_match_detail["Providing Piping Price"].append(value(model.p_TransportPrice[p,c,t]))
-                                d_match_detail["Providing Piping Value"].append(FP_pipel*value(model.p_TransportPrice[p,c,t]))
+                                d_match_detail["Providing Piping Volume"].append(
+                                    FP_pipel
+                                )
+                                d_match_detail["Providing Piping Price"].append(
+                                    value(model.p_TransportPrice[p, c, t])
+                                )
+                                d_match_detail["Providing Piping Value"].append(
+                                    FP_pipel * value(model.p_TransportPrice[p, c, t])
+                                )
                             else:
-                                d_match_detail["Providing Piping Volume"].append(na_string)
-                                d_match_detail["Providing Piping Price"].append(na_string)
-                                d_match_detail["Providing Piping Value"].append(na_string)
+                                d_match_detail["Providing Piping Volume"].append(
+                                    na_string
+                                )
+                                d_match_detail["Providing Piping Price"].append(
+                                    na_string
+                                )
+                                d_match_detail["Providing Piping Value"].append(
+                                    na_string
+                                )
                             if FC_truck > 0:
-                                d_match_detail["Purchasing Trucking Volume"].append(FC_truck)
-                                d_match_detail["Purchasing Trucking Price"].append(value(model.p_TransportPrice[p,c,t]))
-                                d_match_detail["Purchasing Trucking Value"].append(FC_truck*value(model.p_TransportPrice[p,c,t]))
+                                d_match_detail["Purchasing Trucking Volume"].append(
+                                    FC_truck
+                                )
+                                d_match_detail["Purchasing Trucking Price"].append(
+                                    value(model.p_TransportPrice[p, c, t])
+                                )
+                                d_match_detail["Purchasing Trucking Value"].append(
+                                    FC_truck * value(model.p_TransportPrice[p, c, t])
+                                )
                             else:
-                                d_match_detail["Purchasing Trucking Volume"].append(na_string)
-                                d_match_detail["Purchasing Trucking Price"].append(na_string)
-                                d_match_detail["Purchasing Trucking Value"].append(na_string)
+                                d_match_detail["Purchasing Trucking Volume"].append(
+                                    na_string
+                                )
+                                d_match_detail["Purchasing Trucking Price"].append(
+                                    na_string
+                                )
+                                d_match_detail["Purchasing Trucking Value"].append(
+                                    na_string
+                                )
                             if FC_pipel > 0:
-                                d_match_detail["Purchasing Piping Volume"].append(FC_pipel)
-                                d_match_detail["Purchasing Piping Price"].append(value(model.p_TransportPrice[p,c,t]))
-                                d_match_detail["Purchasing Piping Value"].append(FC_pipel*value(model.p_TransportPrice[p,c,t]))
+                                d_match_detail["Purchasing Piping Volume"].append(
+                                    FC_pipel
+                                )
+                                d_match_detail["Purchasing Piping Price"].append(
+                                    value(model.p_TransportPrice[p, c, t])
+                                )
+                                d_match_detail["Purchasing Piping Value"].append(
+                                    FC_pipel * value(model.p_TransportPrice[p, c, t])
+                                )
                             else:
-                                d_match_detail["Purchasing Piping Volume"].append(na_string)
-                                d_match_detail["Purchasing Piping Price"].append(na_string)
-                                d_match_detail["Purchasing Piping Value"].append(na_string)
+                                d_match_detail["Purchasing Piping Volume"].append(
+                                    na_string
+                                )
+                                d_match_detail["Purchasing Piping Price"].append(
+                                    na_string
+                                )
+                                d_match_detail["Purchasing Piping Value"].append(
+                                    na_string
+                                )
                             d_match_detail["Net Value"].append(match_net_value)
-                            d_match_detail["Net Balance Type"].append(NetBalanceType(match_net_value))
+                            d_match_detail["Net Balance Type"].append(
+                                NetBalanceType(match_net_value)
+                            )
                             d_match_detail["Quality"].append(temp_qual_val)
                     # Finally, push match details to Supply match dictionary
                     d_supply_match["Matches"].append(d_match_detail)
 
- 
     # iterate over consumer requests
     for ci in model.s_CI:
-        if df_v_Demand_totals.index.isin([ci]).any(axis=None) and df_v_Demand_totals.loc[ci,"Rate"] > 0: # there's a match for this request
+        if (
+            df_v_Demand_totals.index.isin([ci]).any(axis=None)
+            and df_v_Demand_totals.loc[ci, "Rate"] > 0
+        ):  # there's a match for this request
             c = model.p_ConsumerPadUnique[ci]
             for p in model.s_PPUnique:
                 # Filter all the matches to producer pads p; these may be empty (v_Demand(ci)>0 does not imply every p will be matched)
-                #TODO: check to see if this won't double count entries; might need to filter using a set; c might not be associated with this ci
-                df_FP_truck_filter = df_FP_truck.loc[(df_FP_truck["Supplier Wellpad"] == p) & (df_FP_truck["Consumer Wellpad"] == c)]
-                df_FP_pipel_filter = df_FP_pipel.loc[(df_FP_pipel["Supplier Wellpad"] == p) & (df_FP_pipel["Consumer Wellpad"] == c)]
-                df_FC_truck_filter = df_FC_truck.loc[(df_FC_truck["Supplier Wellpad"] == p) & (df_FC_truck["Consumer Index"] == ci)]
-                df_FC_pipel_filter = df_FC_pipel.loc[(df_FC_pipel["Supplier Wellpad"] == p) & (df_FC_pipel["Consumer Index"] == ci)]
+                # TODO: check to see if this won't double count entries; might need to filter using a set; c might not be associated with this ci
+                df_FP_truck_filter = df_FP_truck.loc[
+                    (df_FP_truck["Supplier Wellpad"] == p)
+                    & (df_FP_truck["Consumer Wellpad"] == c)
+                ]
+                df_FP_pipel_filter = df_FP_pipel.loc[
+                    (df_FP_pipel["Supplier Wellpad"] == p)
+                    & (df_FP_pipel["Consumer Wellpad"] == c)
+                ]
+                df_FC_truck_filter = df_FC_truck.loc[
+                    (df_FC_truck["Supplier Wellpad"] == p)
+                    & (df_FC_truck["Consumer Index"] == ci)
+                ]
+                df_FC_pipel_filter = df_FC_pipel.loc[
+                    (df_FC_pipel["Supplier Wellpad"] == p)
+                    & (df_FC_pipel["Consumer Index"] == ci)
+                ]
                 # Is there a match with this element, p?
-                if not (df_FP_truck_filter.empty and df_FP_pipel_filter.empty and df_FC_truck_filter.empty and df_FC_pipel_filter.empty): # there's a match with this destination
+                if not (
+                    df_FP_truck_filter.empty
+                    and df_FP_pipel_filter.empty
+                    and df_FC_truck_filter.empty
+                    and df_FC_pipel_filter.empty
+                ):  # there's a match with this destination
                     # populate main-level match detail dictionary
                     d_demand_match["Index"].append(ci)
-                    d_demand_match["Pair Index"].append(ci+"-"+model.p_ProducerWellIDMap[p])
-                    d_demand_match["Operator"].append(model.df_consumer.loc[ci,"Operator"])
-                    d_demand_match["UserID"].append(model.df_consumer.loc[ci,"UserID"])
-                    d_demand_match["Wellpad"].append(model.df_consumer.loc[ci,"Wellpad"])
-                    d_demand_match["Longitude"].append(model.df_consumer.loc[ci,"Longitude"])
-                    d_demand_match["Latitude"].append(model.df_consumer.loc[ci,"Latitude"])
-                    d_demand_match["Start Date"].append(model.df_consumer.loc[ci,"Start Date"])
-                    d_demand_match["End Date"].append(model.df_consumer.loc[ci,"End Date"])
-                    d_demand_match["Demand Rate (bpd)"].append(model.df_consumer.loc[pi,"Demand Rate (bpd)"])
-                    d_demand_match["Consumer Bid (USD/bbl)"].append(model.df_consumer.loc[pi,"Consumer Bid (USD/bbl)"])
-                    d_demand_match["Bid Type"].append(model.df_consumer.loc[pi,"Bid Type"])
-                    d_demand_match["Trucks Accepted"].append(model.df_consumer.loc[pi,"Trucks Accepted"])
-                    d_demand_match["Pipes Accepted"].append(model.df_consumer.loc[pi,"Pipes Accepted"])
-                    d_demand_match["Truck Max Dist (mi)"].append(model.df_consumer.loc[pi,"Truck Max Dist (mi)"])
-                    d_demand_match["Trucking Capacity (bpd)"].append(model.df_consumer.loc[pi,"Trucking Capacity (bpd)"])
-                    d_demand_match["Truck Transport Bid (USD/bbl)"].append(model.df_consumer.loc[pi,"Truck Transport Bid (USD/bbl)"])
-                    d_demand_match["Pipe Max Dist (mi)"].append(model.df_consumer.loc[pi,"Pipe Max Dist (mi)"])
-                    d_demand_match["Pipeline Capacity (bpd)"].append(model.df_consumer.loc[pi,"Pipeline Capacity (bpd)"])
-                    d_demand_match["Pipe Transport Bid (USD/bbl)"].append(model.df_consumer.loc[pi,"Pipe Transport Bid (USD/bbl)"])
+                    d_demand_match["Pair Index"].append(
+                        ci + "-" + model.p_ProducerWellIDMap[p]
+                    )
+                    d_demand_match["Operator"].append(
+                        model.df_consumer.loc[ci, "Operator"]
+                    )
+                    d_demand_match["UserID"].append(model.df_consumer.loc[ci, "UserID"])
+                    d_demand_match["Wellpad"].append(
+                        model.df_consumer.loc[ci, "Wellpad"]
+                    )
+                    d_demand_match["Longitude"].append(
+                        model.df_consumer.loc[ci, "Longitude"]
+                    )
+                    d_demand_match["Latitude"].append(
+                        model.df_consumer.loc[ci, "Latitude"]
+                    )
+                    d_demand_match["Start Date"].append(
+                        model.df_consumer.loc[ci, "Start Date"]
+                    )
+                    d_demand_match["End Date"].append(
+                        model.df_consumer.loc[ci, "End Date"]
+                    )
+                    d_demand_match["Demand Rate (bpd)"].append(
+                        model.df_consumer.loc[pi, "Demand Rate (bpd)"]
+                    )
+                    d_demand_match["Consumer Bid (USD/bbl)"].append(
+                        model.df_consumer.loc[pi, "Consumer Bid (USD/bbl)"]
+                    )
+                    d_demand_match["Bid Type"].append(
+                        model.df_consumer.loc[pi, "Bid Type"]
+                    )
+                    d_demand_match["Trucks Accepted"].append(
+                        model.df_consumer.loc[pi, "Trucks Accepted"]
+                    )
+                    d_demand_match["Pipes Accepted"].append(
+                        model.df_consumer.loc[pi, "Pipes Accepted"]
+                    )
+                    d_demand_match["Truck Max Dist (mi)"].append(
+                        model.df_consumer.loc[pi, "Truck Max Dist (mi)"]
+                    )
+                    d_demand_match["Trucking Capacity (bpd)"].append(
+                        model.df_consumer.loc[pi, "Trucking Capacity (bpd)"]
+                    )
+                    d_demand_match["Truck Transport Bid (USD/bbl)"].append(
+                        model.df_consumer.loc[pi, "Truck Transport Bid (USD/bbl)"]
+                    )
+                    d_demand_match["Pipe Max Dist (mi)"].append(
+                        model.df_consumer.loc[pi, "Pipe Max Dist (mi)"]
+                    )
+                    d_demand_match["Pipeline Capacity (bpd)"].append(
+                        model.df_consumer.loc[pi, "Pipeline Capacity (bpd)"]
+                    )
+                    d_demand_match["Pipe Transport Bid (USD/bbl)"].append(
+                        model.df_consumer.loc[pi, "Pipe Transport Bid (USD/bbl)"]
+                    )
                     # create sub-level match detail dictionary
                     d_match_detail = {
-                        "Match Index":[],
-                        "Match Date Index":[],
-                        "Match Date":[],
-                        "Match Volume":[],
-                        "Match Price":[],
-                        "Match Value":[],
-                        "Match Balance Type":[],
-                        "Providing Trucking Volume":[],
-                        "Providing Trucking Price":[],
-                        "Providing Trucking Value":[],
-                        "Providing Piping Volume":[],
-                        "Providing Piping Price":[],
-                        "Providing Piping Value":[],
-                        "Purchasing Trucking Volume":[],
-                        "Purchasing Trucking Price":[],
-                        "Purchasing Trucking Value":[],
-                        "Purchasing Piping Volume":[],
-                        "Purchasing Piping Price":[],
-                        "Purchasing Piping Value":[],
-                        "Net Value":[],
-                        "Net Balance Type":[],
-                        "Quality":[]
+                        "Match Index": [],
+                        "Match Date Index": [],
+                        "Match Date": [],
+                        "Match Volume": [],
+                        "Match Price": [],
+                        "Match Value": [],
+                        "Match Balance Type": [],
+                        "Providing Trucking Volume": [],
+                        "Providing Trucking Price": [],
+                        "Providing Trucking Value": [],
+                        "Providing Piping Volume": [],
+                        "Providing Piping Price": [],
+                        "Providing Piping Value": [],
+                        "Purchasing Trucking Volume": [],
+                        "Purchasing Trucking Price": [],
+                        "Purchasing Trucking Value": [],
+                        "Purchasing Piping Volume": [],
+                        "Purchasing Piping Price": [],
+                        "Purchasing Piping Value": [],
+                        "Net Value": [],
+                        "Net Balance Type": [],
+                        "Quality": [],
                     }
                     # Iterate through the possible time points and find matches
                     for t in model.s_T_ci[ci]:
-                        #if value(model.v_Demand[ci,t]) > match_threshold: # there's a match for this request at this time
-                        #TODO: check to see if this won't double count entries; might need to filter using a set; c might not be associated with this ci
-                        df_FP_truck_filter_t = df_FP_truck.loc[(df_FP_truck["Supplier Wellpad"] == p) & (df_FP_truck["Consumer Wellpad"] == c) & (df_FP_truck["Date Index"] == t)]
-                        df_FP_pipel_filter_t = df_FP_pipel.loc[(df_FP_pipel["Supplier Wellpad"] == p) & (df_FP_pipel["Consumer Wellpad"] == c) & (df_FP_pipel["Date Index"] == t)]
-                        df_FC_truck_filter_t = df_FC_truck.loc[(df_FC_truck["Supplier Wellpad"] == p) & (df_FC_truck["Consumer Index"] == ci) & (df_FC_truck["Date Index"] == t)]
-                        df_FC_pipel_filter_t = df_FC_pipel.loc[(df_FC_pipel["Supplier Wellpad"] == p) & (df_FC_pipel["Consumer Index"] == ci) & (df_FC_pipel["Date Index"] == t)]
+                        # if value(model.v_Demand[ci,t]) > match_threshold: # there's a match for this request at this time
+                        # TODO: check to see if this won't double count entries; might need to filter using a set; c might not be associated with this ci
+                        df_FP_truck_filter_t = df_FP_truck.loc[
+                            (df_FP_truck["Supplier Wellpad"] == p)
+                            & (df_FP_truck["Consumer Wellpad"] == c)
+                            & (df_FP_truck["Date Index"] == t)
+                        ]
+                        df_FP_pipel_filter_t = df_FP_pipel.loc[
+                            (df_FP_pipel["Supplier Wellpad"] == p)
+                            & (df_FP_pipel["Consumer Wellpad"] == c)
+                            & (df_FP_pipel["Date Index"] == t)
+                        ]
+                        df_FC_truck_filter_t = df_FC_truck.loc[
+                            (df_FC_truck["Supplier Wellpad"] == p)
+                            & (df_FC_truck["Consumer Index"] == ci)
+                            & (df_FC_truck["Date Index"] == t)
+                        ]
+                        df_FC_pipel_filter_t = df_FC_pipel.loc[
+                            (df_FC_pipel["Supplier Wellpad"] == p)
+                            & (df_FC_pipel["Consumer Index"] == ci)
+                            & (df_FC_pipel["Date Index"] == t)
+                        ]
                         # Is there a match with this element, p, at this time, t?
-                        if not (df_FP_truck_filter_t.empty and df_FP_pipel_filter_t.empty and df_FC_truck_filter_t.empty and df_FC_pipel_filter_t.empty):
+                        if not (
+                            df_FP_truck_filter_t.empty
+                            and df_FP_pipel_filter_t.empty
+                            and df_FC_truck_filter_t.empty
+                            and df_FC_pipel_filter_t.empty
+                        ):
                             # calculations
                             FP_truck = df_FP_truck_filter_t.Rate.sum()
                             FP_pipel = df_FP_pipel_filter_t.Rate.sum()
                             FC_truck = df_FC_truck_filter_t.Rate.sum()
                             FC_pipel = df_FC_pipel_filter_t.Rate.sum()
-                            match_volume = FP_truck+FP_pipel+FC_truck+FC_pipel
-                            match_price = value(model.p_ConsumerNodalPrice[c,t])
-                            match_value = match_volume*match_price
-                            match_net_value = match_value + (-FP_truck-FP_pipel+FC_truck+FC_pipel)*value(model.p_TransportPrice[p,c,t])
+                            match_volume = FP_truck + FP_pipel + FC_truck + FC_pipel
+                            match_price = value(model.p_ConsumerNodalPrice[c, t])
+                            match_value = match_volume * match_price
+                            match_net_value = match_value + (
+                                -FP_truck - FP_pipel + FC_truck + FC_pipel
+                            ) * value(model.p_TransportPrice[p, c, t])
                             # record entries
-                            d_match_detail["Match Index"].append(ci+"-"+p+"-"+t)
+                            d_match_detail["Match Index"].append(ci + "-" + p + "-" + t)
                             d_match_detail["Match Date Index"].append(t)
                             d_match_detail["Match Date"].append(model.d_T[t])
                             d_match_detail["Match Volume"].append(match_volume)
                             d_match_detail["Match Price"].append(match_price)
                             d_match_detail["Match Value"].append(match_value)
-                            #TODO: make match values absolute; for now will use negatives for troubleshooting
-                            d_match_detail["Match Balance Type"].append(SupplierBalanceType(match_value))
-                            if FC_truck > 0: # NOTE: Providing and purchasing transport are relative to the user
-                                #TODO: make transport values absolute; for now negatives will help with troubleshooting
-                                d_match_detail["Providing Trucking Volume"].append(FC_truck)
-                                d_match_detail["Providing Trucking Price"].append(value(model.p_TransportPrice[p,c,t]))
-                                d_match_detail["Providing Trucking Value"].append(FC_truck*value(model.p_TransportPrice[p,c,t]))
+                            # TODO: make match values absolute; for now will use negatives for troubleshooting
+                            d_match_detail["Match Balance Type"].append(
+                                SupplierBalanceType(match_value)
+                            )
+                            if (
+                                FC_truck > 0
+                            ):  # NOTE: Providing and purchasing transport are relative to the user
+                                # TODO: make transport values absolute; for now negatives will help with troubleshooting
+                                d_match_detail["Providing Trucking Volume"].append(
+                                    FC_truck
+                                )
+                                d_match_detail["Providing Trucking Price"].append(
+                                    value(model.p_TransportPrice[p, c, t])
+                                )
+                                d_match_detail["Providing Trucking Value"].append(
+                                    FC_truck * value(model.p_TransportPrice[p, c, t])
+                                )
                             else:
-                                d_match_detail["Providing Trucking Volume"].append(na_string)
-                                d_match_detail["Providing Trucking Price"].append(na_string)
-                                d_match_detail["Providing Trucking Value"].append(na_string)
+                                d_match_detail["Providing Trucking Volume"].append(
+                                    na_string
+                                )
+                                d_match_detail["Providing Trucking Price"].append(
+                                    na_string
+                                )
+                                d_match_detail["Providing Trucking Value"].append(
+                                    na_string
+                                )
                             if FC_pipel > 0:
-                                d_match_detail["Providing Piping Volume"].append(FC_pipel)
-                                d_match_detail["Providing Piping Price"].append(value(model.p_TransportPrice[p,c,t]))
-                                d_match_detail["Providing Piping Value"].append(FC_pipel*value(model.p_TransportPrice[p,c,t]))
+                                d_match_detail["Providing Piping Volume"].append(
+                                    FC_pipel
+                                )
+                                d_match_detail["Providing Piping Price"].append(
+                                    value(model.p_TransportPrice[p, c, t])
+                                )
+                                d_match_detail["Providing Piping Value"].append(
+                                    FC_pipel * value(model.p_TransportPrice[p, c, t])
+                                )
                             else:
-                                d_match_detail["Providing Piping Volume"].append(na_string)
-                                d_match_detail["Providing Piping Price"].append(na_string)
-                                d_match_detail["Providing Piping Value"].append(na_string)
+                                d_match_detail["Providing Piping Volume"].append(
+                                    na_string
+                                )
+                                d_match_detail["Providing Piping Price"].append(
+                                    na_string
+                                )
+                                d_match_detail["Providing Piping Value"].append(
+                                    na_string
+                                )
                             if FP_truck > 0:
-                                d_match_detail["Purchasing Trucking Volume"].append(FP_truck)
-                                d_match_detail["Purchasing Trucking Price"].append(value(model.p_TransportPrice[p,c,t]))
-                                d_match_detail["Purchasing Trucking Value"].append(FP_truck*value(model.p_TransportPrice[p,c,t]))
+                                d_match_detail["Purchasing Trucking Volume"].append(
+                                    FP_truck
+                                )
+                                d_match_detail["Purchasing Trucking Price"].append(
+                                    value(model.p_TransportPrice[p, c, t])
+                                )
+                                d_match_detail["Purchasing Trucking Value"].append(
+                                    FP_truck * value(model.p_TransportPrice[p, c, t])
+                                )
                             else:
-                                d_match_detail["Purchasing Trucking Volume"].append(na_string)
-                                d_match_detail["Purchasing Trucking Price"].append(na_string)
-                                d_match_detail["Purchasing Trucking Value"].append(na_string)
+                                d_match_detail["Purchasing Trucking Volume"].append(
+                                    na_string
+                                )
+                                d_match_detail["Purchasing Trucking Price"].append(
+                                    na_string
+                                )
+                                d_match_detail["Purchasing Trucking Value"].append(
+                                    na_string
+                                )
                             if FP_pipel > 0:
-                                d_match_detail["Purchasing Piping Volume"].append(FP_pipel)
-                                d_match_detail["Purchasing Piping Price"].append(value(model.p_TransportPrice[p,c,t]))
-                                d_match_detail["Purchasing Piping Value"].append(FP_pipel*value(model.p_TransportPrice[p,c,t]))
+                                d_match_detail["Purchasing Piping Volume"].append(
+                                    FP_pipel
+                                )
+                                d_match_detail["Purchasing Piping Price"].append(
+                                    value(model.p_TransportPrice[p, c, t])
+                                )
+                                d_match_detail["Purchasing Piping Value"].append(
+                                    FP_pipel * value(model.p_TransportPrice[p, c, t])
+                                )
                             else:
-                                d_match_detail["Purchasing Piping Volume"].append(na_string)
-                                d_match_detail["Purchasing Piping Price"].append(na_string)
-                                d_match_detail["Purchasing Piping Value"].append(na_string)
+                                d_match_detail["Purchasing Piping Volume"].append(
+                                    na_string
+                                )
+                                d_match_detail["Purchasing Piping Price"].append(
+                                    na_string
+                                )
+                                d_match_detail["Purchasing Piping Value"].append(
+                                    na_string
+                                )
                             d_match_detail["Net Value"].append(match_net_value)
-                            d_match_detail["Net Balance Type"].append(NetBalanceType(match_net_value))
+                            d_match_detail["Net Balance Type"].append(
+                                NetBalanceType(match_net_value)
+                            )
                             d_match_detail["Quality"].append(temp_qual_val)
                     # Finally, push match details to Demand match dictionary
-                    d_demand_match["Matches"].append(d_match_detail) 
- 
+                    d_demand_match["Matches"].append(d_match_detail)
 
     # convert buildup dictionaries to dataframes
     df_supply_match = pd.DataFrame.from_dict(d_supply_match)
@@ -1847,7 +2164,7 @@ def PostSolve(model):
     )
 
     # Get trucking nodal prices from nodal price differences
-    def TransportPriceINIT(model,p,c,t):
+    def TransportPriceINIT(model, p, c, t):
         try:
             # NOTE: (-1) multiplier here for dual
             return value(
@@ -2254,10 +2571,10 @@ def OutputMatchesToUsers(matches_dir, output_dir):
     Outputs:
     - None
     """
-    
+
     # Load data from JSON file
-    with open(matches_dir, 'r') as match_data:
-        match_data = json.load(match_data) # load data as dictionary
+    with open(matches_dir, "r") as match_data:
+        match_data = json.load(match_data)  # load data as dictionary
 
     # Convert match data to dataframe
     df_matches_s = pd.DataFrame(data=match_data["Supply"])
@@ -2267,12 +2584,16 @@ def OutputMatchesToUsers(matches_dir, output_dir):
         UserID = match_data["Supply"][i]["UserID"]
         # Get match details to export and convert to dataframe
         df_match_details = pd.DataFrame.from_dict(df_matches_s.loc[i]["Matches"])
-        df_match_details.drop("Match Index", axis=1, inplace=True) # remove identifying information
+        df_match_details.drop(
+            "Match Index", axis=1, inplace=True
+        )  # remove identifying information
         # Check if output folder exists
-        if not os.path.exists(os.path.join(output_dir,UserID)):
-            os.mkdir(os.path.join(output_dir,UserID))
+        if not os.path.exists(os.path.join(output_dir, UserID)):
+            os.mkdir(os.path.join(output_dir, UserID))
         # Create file name from Match Index and export
-        output_file_name = os.path.join(output_dir,UserID,df_matches_s.loc[i]["Pair Index"]+".csv")
+        output_file_name = os.path.join(
+            output_dir, UserID, df_matches_s.loc[i]["Pair Index"] + ".csv"
+        )
         df_match_details.to_csv(output_file_name, index=False)
 
     # Convert match data to dataframe
@@ -2283,12 +2604,16 @@ def OutputMatchesToUsers(matches_dir, output_dir):
         UserID = match_data["Demand"][i]["UserID"]
         # Get match details to export and convert to dataframe
         df_match_details = pd.DataFrame.from_dict(df_matches_d.loc[i]["Matches"])
-        df_match_details.drop("Match Index", axis=1, inplace=True) # remove identifying information
+        df_match_details.drop(
+            "Match Index", axis=1, inplace=True
+        )  # remove identifying information
         # Check if output folder exists
-        if not os.path.exists(os.path.join(output_dir,UserID)):
-            os.mkdir(os.path.join(output_dir,UserID))
+        if not os.path.exists(os.path.join(output_dir, UserID)):
+            os.mkdir(os.path.join(output_dir, UserID))
         # Create file name from Match Index and export
-        output_file_name = os.path.join(output_dir,UserID,df_matches_d.loc[i]["Pair Index"]+".csv")
+        output_file_name = os.path.join(
+            output_dir, UserID, df_matches_d.loc[i]["Pair Index"] + ".csv"
+        )
         df_match_details.to_csv(output_file_name, index=False)
 
     return None

@@ -29,9 +29,7 @@ def df_to_dict_helper(df):
 
 
 ##################################################
-def csv_2_json(
-    input_dir, PRODUCER_CSV, CONSUMER_CSV, name="jsonized_data.json"
-):
+def csv_2_json(input_dir, PRODUCER_CSV, CONSUMER_CSV, name="jsonized_data.json"):
     """
     A function that converts existing case study .csv data files into the newer JSON format
     Inputs:
@@ -326,7 +324,7 @@ def GetUniqueDFData(df, key_col, val_col):
 
 
 ##################################################
-def GenerateCombinationDataFrame(df1,df2,name,newname1,newname2):
+def GenerateCombinationDataFrame(df1, df2, name, newname1, newname2):
     """
     Returns a DataFrame consisting of the combinations of the entities in df1 and df2
     NOTE: column DataFrames can be extracted using double-square brackets without conversion to sequence
@@ -337,12 +335,14 @@ def GenerateCombinationDataFrame(df1,df2,name,newname1,newname2):
     -df_cross: an m1xm2-by-2 DataFrame
     """
     # Will use pd.merge; reqiures some trickery; we will add dummy indices to get the dehavior we want
-    pd.options.mode.chained_assignment = None # to stop pandas warning us about the behavior we are using
+    pd.options.mode.chained_assignment = (
+        None  # to stop pandas warning us about the behavior we are using
+    )
     df1["temp"] = 1
     df2["temp"] = 1
     # rename columns for output (and to avoid merge)
-    df1.rename(columns={name: newname1},inplace=True)
-    df2.rename(columns={name: newname2},inplace=True)
+    df1.rename(columns={name: newname1}, inplace=True)
+    df2.rename(columns={name: newname2}, inplace=True)
     # merge: df_cross =
     return df1.merge(df2, on="temp", how="outer").drop(columns="temp")
 
@@ -361,7 +361,9 @@ def SupplierBidType(text):
     elif text == "Want to be paid":
         return 1
     else:
-        raise Exception("Please verify that the contents of df_producer['Bid Type'] are correct.")
+        raise Exception(
+            "Please verify that the contents of df_producer['Bid Type'] are correct."
+        )
 
 
 ##################################################
@@ -378,7 +380,9 @@ def ConsumerBidType(text):
     elif text == "Want to be paid":
         return -1
     else:
-        raise Exception("Please verify that the contents of df_consumer['Bid Type'] are correct.")
+        raise Exception(
+            "Please verify that the contents of df_consumer['Bid Type'] are correct."
+        )
 
 
 ##################################################

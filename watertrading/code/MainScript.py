@@ -16,24 +16,24 @@ from os.path import join
 # RUN OPTIMIZATION ALGORITHM
 def run_optimization_models(
     data_dir=getcwd(),
-    output_dir=join(getcwd(),"match-detail"),
+    output_dir=join(getcwd(), "match-detail"),
     file_names={
-        "requests":"_requests.json",
-        "distance":"_distance.json",
-        "matches":"_matches.json",
-        "profits":"_profits.json"
+        "requests": "_requests.json",
+        "distance": "_distance.json",
+        "matches": "_matches.json",
+        "profits": "_profits.json",
     },
     Update_distance_matrix=True,
     filter_by_date=None,
 ):
 
     # Set up file path names
-    request_dir = join(data_dir,file_names["requests"])
-    distance_dir = join(data_dir,file_names["distance"])
-    matches_dir = join(data_dir,file_names["matches"])
-    profits_dir = join(data_dir,file_names["profits"])
+    request_dir = join(data_dir, file_names["requests"])
+    distance_dir = join(data_dir, file_names["distance"])
+    matches_dir = join(data_dir, file_names["matches"])
+    profits_dir = join(data_dir, file_names["profits"])
 
-    # Build model 
+    # Build model
     (
         df_producer,
         df_consumer,
@@ -77,10 +77,10 @@ def run_optimization_models(
         print("results are optimal")
         water_sharing = BuildModel.PostSolve(water_sharing)
         BuildModel.jsonize_outputs(water_sharing, matches_dir)
-        BuildModel.OutputMatchesToUsers(matches_dir,output_dir)
-        #BuildModel.jsonize_profits(water_sharing, profits_dir)
-        #BuildModel.DataViews(water_sharing, data_dir)
-        #BuildModel.PostSolveViews(water_sharing, data_dir)
+        BuildModel.OutputMatchesToUsers(matches_dir, output_dir)
+        # BuildModel.jsonize_profits(water_sharing, profits_dir)
+        # BuildModel.DataViews(water_sharing, data_dir)
+        # BuildModel.PostSolveViews(water_sharing, data_dir)
         return None
     else:
         print("results are invalid")
