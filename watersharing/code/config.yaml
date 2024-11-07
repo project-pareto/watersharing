@@ -1,7 +1,11 @@
 local_vars:
-  ex_path_var: "./export_local"
-  in_path_var: "./import_local"
+  ex_path_var: "./export_local/watersharing"
+  in_path_var: "./import_local/watersharing"
+  ex_path_var: "./export_local/watertrading"
+  in_path_var: "./import_local/watertrading"
 
 production_vars:
-  ex_path_var: "/var/www/share.producedwater.org/wp-content/plugins/watersharing/io/export/"
-  in_path_var: "/var/www/share.producedwater.org/wp-content/plugins/watersharing/io/import/"
+  ex_path_var: "/var/www/share.producedwater.org/wp-content/plugins/watersharing-wp/io/watersharing/export/"
+  in_path_var: "/var/www/share.producedwater.org/wp-content/plugins/watersharing-wp/io/watersharing/import/"
+  ex_path_var: "/var/www/share.producedwater.org/wp-content/plugins/watersharing-wp/io/watertrading/export/"
+  in_path_var: "/var/www/share.producedwater.org/wp-content/plugins/watersharing-wp/io/watertrading/import/"
