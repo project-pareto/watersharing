@@ -1,6 +1,5 @@
 import os
 import time
-import sys
 import argparse
 import yaml
 from watchdog.observers import Observer
@@ -18,11 +17,7 @@ class EventHandler(FileSystemEventHandler):
         self.in_path_trading = os.path.abspath(os.path.expanduser(in_path_trading))
     
     def on_any_event(self, event):
-        print("Event detected:", event.event_type, event.src_path)  # Debug line to confirm event detection
         if event.event_type == 'created' and event.src_path.endswith('.json'):
-            print("File Created")
-            print("Self.in_path_sharing: ", self.in_path_sharing)
-            print("event.src_path: ", event.src_path)
             if self.in_path_sharing in event.src_path:
                 print("Running water sharing function")  # Debug line for path match
                 run_watersharing(self.in_path_sharing, self.ex_path_sharing)
@@ -52,8 +47,6 @@ if __name__ == "__main__":
     in_path_sharing = config['watersharing']['in_path']
     ex_path_trading = config['watertrading']['ex_path']
     in_path_trading = config['watertrading']['in_path']
-
-    print(in_path_sharing)
 
     for path_var in [ex_path_sharing, in_path_sharing, ex_path_trading, in_path_trading]:
         path = os.path.expanduser(path_var)
