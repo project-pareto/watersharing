@@ -18,10 +18,10 @@ class EventHandler(FileSystemEventHandler):
     
     def on_any_event(self, event):
         if event.event_type == 'created' and event.src_path.endswith('.json'):
-            if self.in_path_sharing in event.src_path:
+            if self.ex_path_sharing in event.src_path:
                 print("Running water sharing function")  # Debug line for path match
                 run_watersharing(self.in_path_sharing, self.ex_path_sharing)
-            elif self.in_path_trading in event.src_path:
+            elif self.ex_path_trading in event.src_path:
                 print("Running water trading function")  # Debug line for path match
                 run_watertrading(self.in_path_trading, self.ex_path_trading)
 
@@ -55,8 +55,8 @@ if __name__ == "__main__":
 
     event_handler = EventHandler(in_path_sharing, ex_path_sharing, in_path_trading, ex_path_trading) 
     observer = Observer()
-    observer.schedule(event_handler, os.path.expanduser(in_path_sharing), recursive=True)
-    observer.schedule(event_handler, os.path.expanduser(in_path_trading), recursive=True)
+    observer.schedule(event_handler, os.path.expanduser(ex_path_sharing), recursive=True)
+    observer.schedule(event_handler, os.path.expanduser(ex_path_trading), recursive=True)
     observer.start()
 
     try:

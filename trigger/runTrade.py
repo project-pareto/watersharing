@@ -18,7 +18,7 @@ def run_watertrading(in_path_trading, ex_path_trading):
         raise Exception("Error: Target folder is empty or does not exist")
 
     latest_file = max(list_of_files, key=os.path.getmtime)
-    output_dir = os.path.join(in_path_trading, "match-detail")
+    output_dir = os.path.join(ex_path_trading, "match-detail")
     file_names = {
         "requests": "_requests.json",
         "distance": "_distance.json",
