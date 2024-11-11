@@ -13,15 +13,15 @@ from WSP_Visualization import SummaryPlot
 
 def run_watersharing(in_path_sharing, ex_path_sharing):
     print("RUN SHARE STARTED")
-    path = os.path.expanduser(in_path_sharing + "/*.json")
+    path = os.path.expanduser(ex_path_sharing + "/*.json")
     list_of_files = glob.glob(path)
 
     if len(list_of_files) == 0:
         raise Exception("Error: Target folder is empty or does not exist")
 
     latest_file = max(list_of_files, key=os.path.getmtime)
-    DISTANCE_JSON = os.path.join(ex_path_sharing, "GWPC_V2\\GWPC_V2_distance.json")
-    MATCHES_JSON = os.path.join(ex_path_sharing, "GWPC_V2\\GWPC_V2_matches.json")
+    DISTANCE_JSON = os.path.join(in_path_sharing, "GWPC_V2\\GWPC_V2_distance.json")
+    MATCHES_JSON = os.path.join(in_path_sharing, "GWPC_V2\\GWPC_V2_matches.json")
 
     # Run water sharing optimization model
     WS.run_optimization_models(latest_file, DISTANCE_JSON, MATCHES_JSON, Update_distance_matrix=True)
