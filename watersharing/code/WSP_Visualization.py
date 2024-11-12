@@ -1,6 +1,9 @@
 """
 A collection of functions for plotting & visualization
 """
+import matplotlib
+matplotlib.use('agg')  # Set the backend before importing any other parts of matplotlib
+
 import os
 import pandas as pd
 import json
