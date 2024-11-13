@@ -434,3 +434,20 @@ def NetBalanceType(value):
         return "To be paid to me"
     else:
         raise Exception("Please ensure the value entered is a number.")
+
+
+##################################################
+def DFRateSum(df):
+    """
+    A simple function that calculates the sum of a pivot table column if that pivot is not empty, else returns zero if it is
+    Inputs:
+    - df: a dataframe; it must either have a "Rate" column or be empty
+    Outputs:
+    - either df.Rate.sum() or 0, depending
+    """
+    if not df.empty:
+        return df.Rate.sum()
+    elif df.empty:
+        return 0
+    else:
+        raise Exception("Please ensure that a dataframe has been input and has a \"Rate\" column.")
