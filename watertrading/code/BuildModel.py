@@ -34,8 +34,8 @@ from Utilities import (
     SupplierBalanceType,
     ConsumerBalanceType,
     NetBalanceType,
+    DFRateSum,
 )
-
 
 ##################################################
 # CREATE CONFIG DICTIONARY
@@ -1498,6 +1498,8 @@ def jsonize_outputs(
         "Pipeline Capacity (bpd)": [],
         "Pipe Transport Bid (USD/bbl)": [],
         "Matches": [],
+        "Match Total Volume (bbl)":[],
+        "Match Total Value (USD)":[],
     }
 
     d_demand_match = {
@@ -1522,6 +1524,8 @@ def jsonize_outputs(
         "Pipeline Capacity (bpd)": [],
         "Pipe Transport Bid (USD/bbl)": [],
         "Matches": [],
+        "Match Total Volume (bbl)":[],
+        "Match Total Value (USD)":[],
     }
 
     # iterate over supplier requests
@@ -1530,27 +1534,40 @@ def jsonize_outputs(
         if (
             df_v_Supply_totals.index.isin([pi]).any(axis=None)
             and df_v_Supply_totals.loc[pi, "Rate"] > 0
-        ):  # there's a match for this request
+        ):  # there's a match for this request; we just need to figure out within which of the four transport tables
             p = model.p_ProducerPadUnique[pi]
             for c in model.s_CPUnique:
                 # Filter all the matches to consumer pads c; these may be empty (v_Supply(pi)>0 does not imply every c will be matched)
-                df_FP_truck_filter = df_FP_truck.loc[
-                    (df_FP_truck["Supplier Index"] == pi)
-                    & (df_FP_truck["Consumer Wellpad"] == c)
-                ]
-                df_FP_pipel_filter = df_FP_pipel.loc[
-                    (df_FP_pipel["Supplier Index"] == pi)
-                    & (df_FP_pipel["Consumer Wellpad"] == c)
-                ]
+                if not df_FP_truck.empty:
+                    df_FP_truck_filter = df_FP_truck.loc[
+                        (df_FP_truck["Supplier Index"] == pi)
+                        & (df_FP_truck["Consumer Wellpad"] == c)
+                    ]
+                else: # if it is empty
+                    df_FP_truck_filter = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
+                if not df_FP_pipel.empty:
+                    df_FP_pipel_filter = df_FP_pipel.loc[
+                        (df_FP_pipel["Supplier Index"] == pi)
+                        & (df_FP_pipel["Consumer Wellpad"] == c)
+                    ]
+                else: # if it is empty
+                    df_FP_pipel_filter = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
                 # TODO: check to see if this won't double count entries; might need to filter using a set; p might not be associated with this pi
-                df_FC_truck_filter = df_FC_truck.loc[
-                    (df_FC_truck["Supplier Wellpad"] == p)
-                    & (df_FC_truck["Consumer Wellpad"] == c)
-                ]
-                df_FC_pipel_filter = df_FC_pipel.loc[
-                    (df_FC_pipel["Supplier Wellpad"] == p)
-                    & (df_FC_pipel["Consumer Wellpad"] == c)
-                ]
+                # This should be addressed by the Unique Wellpad indexing; confirm nevertheless.
+                if not df_FC_truck.empty:
+                    df_FC_truck_filter = df_FC_truck.loc[
+                        (df_FC_truck["Supplier Wellpad"] == p)
+                        & (df_FC_truck["Consumer Wellpad"] == c)
+                    ]
+                else: # if it is empty
+                    df_FC_truck_filter = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
+                if not df_FP_pipel.empty:
+                    df_FC_pipel_filter = df_FC_pipel.loc[
+                        (df_FC_pipel["Supplier Wellpad"] == p)
+                        & (df_FC_pipel["Consumer Wellpad"] == c)
+                    ]
+                else: # if it is empty
+                    df_FC_pipel_filter = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
                 # Is there a match with this element, c?
                 if not (
                     df_FP_truck_filter.empty
@@ -1566,7 +1583,9 @@ def jsonize_outputs(
                     d_supply_match["Operator"].append(
                         model.df_producer.loc[pi, "Operator"]
                     )
-                    d_supply_match["UserID"].append(model.df_producer.loc[pi, "UserID"])
+                    d_supply_match["UserID"].append(
+                        model.df_producer.loc[pi, "UserID"]
+                    )
                     d_supply_match["Wellpad"].append(
                         model.df_producer.loc[pi, "Wellpad"]
                     )
@@ -1643,27 +1662,39 @@ def jsonize_outputs(
                     # Iterate through the possible time points and find matches
                     for t in model.s_T_pi[pi]:
                         # if value(model.v_Supply[pi,t]) > match_threshold: # there's a match for this request at this time
-                        df_FP_truck_filter_t = df_FP_truck.loc[
-                            (df_FP_truck["Supplier Index"] == pi)
-                            & (df_FP_truck["Consumer Wellpad"] == c)
-                            & (df_FP_truck["Date Index"] == t)
-                        ]
-                        df_FP_pipel_filter_t = df_FP_pipel.loc[
-                            (df_FP_pipel["Supplier Index"] == pi)
-                            & (df_FP_pipel["Consumer Wellpad"] == c)
-                            & (df_FP_pipel["Date Index"] == t)
-                        ]
+                        if not df_FP_truck.empty:
+                            df_FP_truck_filter_t = df_FP_truck.loc[
+                                (df_FP_truck["Supplier Index"] == pi)
+                                & (df_FP_truck["Consumer Wellpad"] == c)
+                                & (df_FP_truck["Date Index"] == t)
+                            ]
+                        else:
+                            df_FP_truck_filter_t = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
+                        if not df_FP_pipel.empty:
+                            df_FP_pipel_filter_t = df_FP_pipel.loc[
+                                (df_FP_pipel["Supplier Index"] == pi)
+                                & (df_FP_pipel["Consumer Wellpad"] == c)
+                                & (df_FP_pipel["Date Index"] == t)
+                            ]
+                        else:
+                            df_FP_pipel_filter_t = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
                         # TODO: check to see if this won't double count entries; might need to filter using a set; p might not be associated with this pi
-                        df_FC_truck_filter_t = df_FC_truck.loc[
-                            (df_FC_truck["Supplier Wellpad"] == p)
-                            & (df_FC_truck["Consumer Wellpad"] == c)
-                            & (df_FC_truck["Date Index"] == t)
-                        ]
-                        df_FC_pipel_filter_t = df_FC_pipel.loc[
-                            (df_FC_pipel["Supplier Wellpad"] == p)
-                            & (df_FC_pipel["Consumer Wellpad"] == c)
-                            & (df_FC_pipel["Date Index"] == t)
-                        ]
+                        if not df_FC_truck.empty:
+                            df_FC_truck_filter_t = df_FC_truck.loc[
+                                (df_FC_truck["Supplier Wellpad"] == p)
+                                & (df_FC_truck["Consumer Wellpad"] == c)
+                                & (df_FC_truck["Date Index"] == t)
+                            ]
+                        else:
+                            df_FC_truck_filter_t = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
+                        if not df_FC_pipel.empty:
+                            df_FC_pipel_filter_t = df_FC_pipel.loc[
+                                (df_FC_pipel["Supplier Wellpad"] == p)
+                                & (df_FC_pipel["Consumer Wellpad"] == c)
+                                & (df_FC_pipel["Date Index"] == t)
+                            ]
+                        else:
+                            df_FC_pipel_filter_t = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
                         # Is there a match with this element, c, at this time, t?
                         if not (
                             df_FP_truck_filter_t.empty
@@ -1672,16 +1703,16 @@ def jsonize_outputs(
                             and df_FC_pipel_filter_t.empty
                         ):
                             # calculations
-                            FP_truck = df_FP_truck_filter_t.Rate.sum()
-                            FP_pipel = df_FP_pipel_filter_t.Rate.sum()
-                            FC_truck = df_FC_truck_filter_t.Rate.sum()
-                            FC_pipel = df_FC_pipel_filter_t.Rate.sum()
+                            FP_truck = DFRateSum(df_FP_truck_filter_t)
+                            FP_pipel = DFRateSum(df_FP_pipel_filter_t)
+                            FC_truck = DFRateSum(df_FC_truck_filter_t)
+                            FC_pipel = DFRateSum(df_FC_pipel_filter_t)
                             match_volume = FP_truck + FP_pipel + FC_truck + FC_pipel
                             match_price = value(model.p_ProducerNodalPrice[p, t])
                             match_value = match_volume * match_price
                             match_net_value = match_value + (
                                 FP_truck + FP_pipel - FC_truck - FC_pipel
-                            ) * value(model.p_TransportPrice[p, c, t])
+                            ) * model.p_TransportPrice[p, c, t].value
                             # record entries
                             d_match_detail["Match Index"].append(pi + "-" + c + "-" + t)
                             d_match_detail["Match Date Index"].append(t)
@@ -1701,10 +1732,10 @@ def jsonize_outputs(
                                     FP_truck
                                 )
                                 d_match_detail["Providing Trucking Price"].append(
-                                    value(model.p_TransportPrice[p, c, t])
+                                    model.p_TransportPrice[p, c, t].value
                                 )
                                 d_match_detail["Providing Trucking Value"].append(
-                                    FP_truck * value(model.p_TransportPrice[p, c, t])
+                                    FP_truck * model.p_TransportPrice[p, c, t].value
                                 )
                             else:
                                 d_match_detail["Providing Trucking Volume"].append(
@@ -1721,10 +1752,10 @@ def jsonize_outputs(
                                     FP_pipel
                                 )
                                 d_match_detail["Providing Piping Price"].append(
-                                    value(model.p_TransportPrice[p, c, t])
+                                    model.p_TransportPrice[p, c, t].value
                                 )
                                 d_match_detail["Providing Piping Value"].append(
-                                    FP_pipel * value(model.p_TransportPrice[p, c, t])
+                                    FP_pipel * model.p_TransportPrice[p, c, t].value
                                 )
                             else:
                                 d_match_detail["Providing Piping Volume"].append(
@@ -1741,10 +1772,10 @@ def jsonize_outputs(
                                     FC_truck
                                 )
                                 d_match_detail["Purchasing Trucking Price"].append(
-                                    value(model.p_TransportPrice[p, c, t])
+                                    model.p_TransportPrice[p, c, t].value
                                 )
                                 d_match_detail["Purchasing Trucking Value"].append(
-                                    FC_truck * value(model.p_TransportPrice[p, c, t])
+                                    FC_truck * model.p_TransportPrice[p, c, t].value
                                 )
                             else:
                                 d_match_detail["Purchasing Trucking Volume"].append(
@@ -1761,10 +1792,10 @@ def jsonize_outputs(
                                     FC_pipel
                                 )
                                 d_match_detail["Purchasing Piping Price"].append(
-                                    value(model.p_TransportPrice[p, c, t])
+                                    model.p_TransportPrice[p, c, t].value
                                 )
                                 d_match_detail["Purchasing Piping Value"].append(
-                                    FC_pipel * value(model.p_TransportPrice[p, c, t])
+                                    FC_pipel * model.p_TransportPrice[p, c, t].value
                                 )
                             else:
                                 d_match_detail["Purchasing Piping Volume"].append(
@@ -1781,6 +1812,10 @@ def jsonize_outputs(
                                 NetBalanceType(match_net_value)
                             )
                             d_match_detail["Quality"].append(temp_qual_val)
+                        # end if not [all empty] here
+                    # Add integrator terms
+                    d_supply_match["Match Total Volume (bbl)"].append(sum(d_match_detail["Match Volume"]))
+                    d_supply_match["Match Total Value (USD)"].append(sum(d_match_detail["Net Value"]))
                     # Finally, push match details to Supply match dictionary
                     d_supply_match["Matches"].append(d_match_detail)
 
@@ -1789,27 +1824,39 @@ def jsonize_outputs(
         if (
             df_v_Demand_totals.index.isin([ci]).any(axis=None)
             and df_v_Demand_totals.loc[ci, "Rate"] > 0
-        ):  # there's a match for this request
+        ):  # there's a match for this request; we just need to figure out within which of the four transport tables
             c = model.p_ConsumerPadUnique[ci]
             for p in model.s_PPUnique:
                 # Filter all the matches to producer pads p; these may be empty (v_Demand(ci)>0 does not imply every p will be matched)
                 # TODO: check to see if this won't double count entries; might need to filter using a set; c might not be associated with this ci
-                df_FP_truck_filter = df_FP_truck.loc[
-                    (df_FP_truck["Supplier Wellpad"] == p)
-                    & (df_FP_truck["Consumer Wellpad"] == c)
-                ]
-                df_FP_pipel_filter = df_FP_pipel.loc[
-                    (df_FP_pipel["Supplier Wellpad"] == p)
-                    & (df_FP_pipel["Consumer Wellpad"] == c)
-                ]
-                df_FC_truck_filter = df_FC_truck.loc[
-                    (df_FC_truck["Supplier Wellpad"] == p)
-                    & (df_FC_truck["Consumer Index"] == ci)
-                ]
-                df_FC_pipel_filter = df_FC_pipel.loc[
-                    (df_FC_pipel["Supplier Wellpad"] == p)
-                    & (df_FC_pipel["Consumer Index"] == ci)
-                ]
+                if not df_FP_truck.empty:
+                    df_FP_truck_filter = df_FP_truck.loc[
+                        (df_FP_truck["Supplier Wellpad"] == p)
+                        & (df_FP_truck["Consumer Wellpad"] == c)
+                    ]
+                else: # if it is empty
+                    df_FP_truck_filter = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
+                if not df_FP_pipel.empty:
+                    df_FP_pipel_filter = df_FP_pipel.loc[
+                        (df_FP_pipel["Supplier Wellpad"] == p)
+                        & (df_FP_pipel["Consumer Wellpad"] == c)
+                    ]
+                else: # if it is empty
+                    df_FP_pipel_filter = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
+                if not df_FC_truck.empty:
+                    df_FC_truck_filter = df_FC_truck.loc[
+                        (df_FC_truck["Supplier Wellpad"] == p)
+                        & (df_FC_truck["Consumer Index"] == ci)
+                    ]
+                else: # if it is empty
+                    df_FC_truck_filter = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
+                if not df_FC_pipel.empty:
+                    df_FC_pipel_filter = df_FC_pipel.loc[
+                        (df_FC_pipel["Supplier Wellpad"] == p)
+                        & (df_FC_pipel["Consumer Index"] == ci)
+                    ]
+                else: # if it is empty
+                    df_FC_pipel_filter = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
                 # Is there a match with this element, p?
                 if not (
                     df_FP_truck_filter.empty
@@ -1842,37 +1889,37 @@ def jsonize_outputs(
                         model.df_consumer.loc[ci, "End Date"]
                     )
                     d_demand_match["Demand Rate (bpd)"].append(
-                        model.df_consumer.loc[pi, "Demand Rate (bpd)"]
+                        model.df_consumer.loc[ci, "Demand Rate (bpd)"]
                     )
                     d_demand_match["Consumer Bid (USD/bbl)"].append(
-                        model.df_consumer.loc[pi, "Consumer Bid (USD/bbl)"]
+                        model.df_consumer.loc[ci, "Consumer Bid (USD/bbl)"]
                     )
                     d_demand_match["Bid Type"].append(
-                        model.df_consumer.loc[pi, "Bid Type"]
+                        model.df_consumer.loc[ci, "Bid Type"]
                     )
                     d_demand_match["Trucks Accepted"].append(
-                        model.df_consumer.loc[pi, "Trucks Accepted"]
+                        model.df_consumer.loc[ci, "Trucks Accepted"]
                     )
                     d_demand_match["Pipes Accepted"].append(
-                        model.df_consumer.loc[pi, "Pipes Accepted"]
+                        model.df_consumer.loc[ci, "Pipes Accepted"]
                     )
                     d_demand_match["Truck Max Dist (mi)"].append(
-                        model.df_consumer.loc[pi, "Truck Max Dist (mi)"]
+                        model.df_consumer.loc[ci, "Truck Max Dist (mi)"]
                     )
                     d_demand_match["Trucking Capacity (bpd)"].append(
-                        model.df_consumer.loc[pi, "Trucking Capacity (bpd)"]
+                        model.df_consumer.loc[ci, "Trucking Capacity (bpd)"]
                     )
                     d_demand_match["Truck Transport Bid (USD/bbl)"].append(
-                        model.df_consumer.loc[pi, "Truck Transport Bid (USD/bbl)"]
+                        model.df_consumer.loc[ci, "Truck Transport Bid (USD/bbl)"]
                     )
                     d_demand_match["Pipe Max Dist (mi)"].append(
-                        model.df_consumer.loc[pi, "Pipe Max Dist (mi)"]
+                        model.df_consumer.loc[ci, "Pipe Max Dist (mi)"]
                     )
                     d_demand_match["Pipeline Capacity (bpd)"].append(
-                        model.df_consumer.loc[pi, "Pipeline Capacity (bpd)"]
+                        model.df_consumer.loc[ci, "Pipeline Capacity (bpd)"]
                     )
                     d_demand_match["Pipe Transport Bid (USD/bbl)"].append(
-                        model.df_consumer.loc[pi, "Pipe Transport Bid (USD/bbl)"]
+                        model.df_consumer.loc[ci, "Pipe Transport Bid (USD/bbl)"]
                     )
                     # create sub-level match detail dictionary
                     d_match_detail = {
@@ -1903,26 +1950,38 @@ def jsonize_outputs(
                     for t in model.s_T_ci[ci]:
                         # if value(model.v_Demand[ci,t]) > match_threshold: # there's a match for this request at this time
                         # TODO: check to see if this won't double count entries; might need to filter using a set; c might not be associated with this ci
-                        df_FP_truck_filter_t = df_FP_truck.loc[
-                            (df_FP_truck["Supplier Wellpad"] == p)
-                            & (df_FP_truck["Consumer Wellpad"] == c)
-                            & (df_FP_truck["Date Index"] == t)
-                        ]
-                        df_FP_pipel_filter_t = df_FP_pipel.loc[
-                            (df_FP_pipel["Supplier Wellpad"] == p)
-                            & (df_FP_pipel["Consumer Wellpad"] == c)
-                            & (df_FP_pipel["Date Index"] == t)
-                        ]
-                        df_FC_truck_filter_t = df_FC_truck.loc[
-                            (df_FC_truck["Supplier Wellpad"] == p)
-                            & (df_FC_truck["Consumer Index"] == ci)
-                            & (df_FC_truck["Date Index"] == t)
-                        ]
-                        df_FC_pipel_filter_t = df_FC_pipel.loc[
-                            (df_FC_pipel["Supplier Wellpad"] == p)
-                            & (df_FC_pipel["Consumer Index"] == ci)
-                            & (df_FC_pipel["Date Index"] == t)
-                        ]
+                        if not df_FP_truck.empty:
+                            df_FP_truck_filter_t = df_FP_truck.loc[
+                                (df_FP_truck["Supplier Wellpad"] == p)
+                                & (df_FP_truck["Consumer Wellpad"] == c)
+                                & (df_FP_truck["Date Index"] == t)
+                            ]
+                        else:
+                            df_FP_truck_filter_t = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
+                        if not df_FP_pipel.empty:
+                            df_FP_pipel_filter_t = df_FP_pipel.loc[
+                                (df_FP_pipel["Supplier Wellpad"] == p)
+                                & (df_FP_pipel["Consumer Wellpad"] == c)
+                                & (df_FP_pipel["Date Index"] == t)
+                            ]
+                        else:
+                            df_FP_pipel_filter_t = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
+                        if not df_FC_truck.empty:
+                            df_FC_truck_filter_t = df_FC_truck.loc[
+                                (df_FC_truck["Supplier Wellpad"] == p)
+                                & (df_FC_truck["Consumer Index"] == ci)
+                                & (df_FC_truck["Date Index"] == t)
+                            ]
+                        else:
+                            df_FC_truck_filter_t = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
+                        if not df_FC_pipel.empty:
+                            df_FC_pipel_filter_t = df_FC_pipel.loc[
+                                (df_FC_pipel["Supplier Wellpad"] == p)
+                                & (df_FC_pipel["Consumer Index"] == ci)
+                                & (df_FC_pipel["Date Index"] == t)
+                            ]
+                        else:
+                            df_FC_pipel_filter_t = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
                         # Is there a match with this element, p, at this time, t?
                         if not (
                             df_FP_truck_filter_t.empty
@@ -1931,16 +1990,16 @@ def jsonize_outputs(
                             and df_FC_pipel_filter_t.empty
                         ):
                             # calculations
-                            FP_truck = df_FP_truck_filter_t.Rate.sum()
-                            FP_pipel = df_FP_pipel_filter_t.Rate.sum()
-                            FC_truck = df_FC_truck_filter_t.Rate.sum()
-                            FC_pipel = df_FC_pipel_filter_t.Rate.sum()
+                            FP_truck = DFRateSum(df_FP_truck_filter_t)
+                            FP_pipel = DFRateSum(df_FP_pipel_filter_t)
+                            FC_truck = DFRateSum(df_FC_truck_filter_t)
+                            FC_pipel = DFRateSum(df_FC_pipel_filter_t)
                             match_volume = FP_truck + FP_pipel + FC_truck + FC_pipel
                             match_price = value(model.p_ConsumerNodalPrice[c, t])
                             match_value = match_volume * match_price
                             match_net_value = match_value + (
                                 -FP_truck - FP_pipel + FC_truck + FC_pipel
-                            ) * value(model.p_TransportPrice[p, c, t])
+                            ) * model.p_TransportPrice[p, c, t].value
                             # record entries
                             d_match_detail["Match Index"].append(ci + "-" + p + "-" + t)
                             d_match_detail["Match Date Index"].append(t)
@@ -1960,10 +2019,10 @@ def jsonize_outputs(
                                     FC_truck
                                 )
                                 d_match_detail["Providing Trucking Price"].append(
-                                    value(model.p_TransportPrice[p, c, t])
+                                    model.p_TransportPrice[p, c, t].value
                                 )
                                 d_match_detail["Providing Trucking Value"].append(
-                                    FC_truck * value(model.p_TransportPrice[p, c, t])
+                                    FC_truck * model.p_TransportPrice[p, c, t].value
                                 )
                             else:
                                 d_match_detail["Providing Trucking Volume"].append(
@@ -1980,10 +2039,10 @@ def jsonize_outputs(
                                     FC_pipel
                                 )
                                 d_match_detail["Providing Piping Price"].append(
-                                    value(model.p_TransportPrice[p, c, t])
+                                    model.p_TransportPrice[p, c, t].value
                                 )
                                 d_match_detail["Providing Piping Value"].append(
-                                    FC_pipel * value(model.p_TransportPrice[p, c, t])
+                                    FC_pipel * model.p_TransportPrice[p, c, t].value
                                 )
                             else:
                                 d_match_detail["Providing Piping Volume"].append(
@@ -2000,10 +2059,10 @@ def jsonize_outputs(
                                     FP_truck
                                 )
                                 d_match_detail["Purchasing Trucking Price"].append(
-                                    value(model.p_TransportPrice[p, c, t])
+                                    model.p_TransportPrice[p, c, t].value
                                 )
                                 d_match_detail["Purchasing Trucking Value"].append(
-                                    FP_truck * value(model.p_TransportPrice[p, c, t])
+                                    FP_truck * model.p_TransportPrice[p, c, t].value
                                 )
                             else:
                                 d_match_detail["Purchasing Trucking Volume"].append(
@@ -2020,10 +2079,10 @@ def jsonize_outputs(
                                     FP_pipel
                                 )
                                 d_match_detail["Purchasing Piping Price"].append(
-                                    value(model.p_TransportPrice[p, c, t])
+                                    model.p_TransportPrice[p, c, t].value
                                 )
                                 d_match_detail["Purchasing Piping Value"].append(
-                                    FP_pipel * value(model.p_TransportPrice[p, c, t])
+                                    FP_pipel * model.p_TransportPrice[p, c, t].value
                                 )
                             else:
                                 d_match_detail["Purchasing Piping Volume"].append(
@@ -2040,6 +2099,10 @@ def jsonize_outputs(
                                 NetBalanceType(match_net_value)
                             )
                             d_match_detail["Quality"].append(temp_qual_val)
+                        # end if not [all empty] here
+                    # Add integrator terms
+                    d_demand_match["Match Total Volume (bbl)"].append(sum(d_match_detail["Match Volume"]))
+                    d_demand_match["Match Total Value (USD)"].append(sum(d_match_detail["Net Value"]))
                     # Finally, push match details to Demand match dictionary
                     d_demand_match["Matches"].append(d_match_detail)
 
@@ -2083,14 +2146,6 @@ def jsonize_profits(model, profits_dir):
         }
         for key in model.p_ConsumerVolumeProfit
     )
-    df_MidstreamProfit = pd.DataFrame(
-        {
-            "Midstream Index": key,
-            "Profit": model.p_MidstreamTotalProfit[key].value,
-            "Operator": model.p_MidstreamOperator[key],
-        }
-        for key in model.p_MidstreamTotalProfit
-    )
     df_ProducerTransportProfit = pd.DataFrame(
         {
             "Producer Index": key,
@@ -2099,19 +2154,27 @@ def jsonize_profits(model, profits_dir):
         }
         for key in model.p_ProducerTotalTransportProfit
     )
+    df_ConsumerTransportProfit = pd.DataFrame(
+        {
+            "Consumer Index": key,
+            "Profit": model.p_ConsumerTotalTransportProfit[key].value,
+            "Operator": model.p_ConsumerOperator[key],
+        }
+        for key in model.p_ConsumerTotalTransportProfit
+    )
 
     # convert to dictionaries for easy json output
     d_ProducerVolumeProfit = df_ProducerVolumeProfit.to_dict(orient="records")
     d_ConsumerVolumeProfit = df_ConsumerVolumeProfit.to_dict(orient="records")
-    d_MidstreamProfit = df_MidstreamProfit.to_dict(orient="records")
     d_ProducerTransportProfit = df_ProducerTransportProfit.to_dict(orient="records")
+    d_ConsumerTransportProfit = df_ConsumerTransportProfit.to_dict(orient="records")
     with open(profits_dir, "w") as data_file:
         json.dump(
             {
                 "Supply": d_ProducerVolumeProfit,
                 "Demand": d_ConsumerVolumeProfit,
                 "Transport (Producer)": d_ProducerTransportProfit,
-                "Transport (Midstream)": d_MidstreamProfit,
+                "Transport (Consumer)": d_ConsumerTransportProfit,
             },
             data_file,
             indent=2,
@@ -2132,10 +2195,13 @@ def PostSolve(model):
     # Get producer Nodal Prices from clearing constraint dual variables
     def ProducerNodalPriceINIT(model, p, t):
         try:
-            # NOTE: (-1) multiplier here for dual
-            return -1 * model.dual[model.ProducerSupplyBalance[p, t]]
-        except:
-            return None
+            # Is the constraint defined at these indices?
+            dual_key = model.ProducerSupplyBalance[p, t]
+        except KeyError:
+            return None # return None if not index defined
+        else:
+            # NOTE: (-1) multiplier here for dual; some solvers output "negative" dual values
+            return (-1) * model.dual[dual_key]
 
     model.p_ProducerNodalPrice = Param(
         model.s_PPUnique,
@@ -2149,10 +2215,13 @@ def PostSolve(model):
     # Get consumer Nodal Prices from clearing constraint dual variables
     def ConsumerNodalPriceINIT(model, c, t):
         try:
+            # Is the constraint defined at these indices?
+            dual_key = model.ConsumerDemandBalance[c, t]
+        except KeyError:
+            return None # return None if not index defined
+        else:
             # NOTE: (-1) multiplier here for dual
-            return -1 * value(model.dual[model.ConsumerDemandBalance[c, t]])
-        except:
-            return None
+            return (-1) * model.dual[dual_key]
 
     model.p_ConsumerNodalPrice = Param(
         model.s_CPUnique,
@@ -2166,13 +2235,15 @@ def PostSolve(model):
     # Get trucking nodal prices from nodal price differences
     def TransportPriceINIT(model, p, c, t):
         try:
+            # Is the constraint defined at these indices?
+            dual_key_D = model.ConsumerDemandBalance[c, t]
+            dual_key_S = model.ProducerSupplyBalance[p, t]
+        except KeyError:
+            return None # return None if not index defined
+        else:
             # NOTE: (-1) multiplier here for dual
-            return value(
-                -1 * model.dual[model.ConsumerDemandBalance[c, t]]
-                - (-1) * model.dual[model.ProducerSupplyBalance[p, t]]
-            )
-        except:
-            return None
+            print(f"sup: {-1*model.dual[dual_key_S]}, dem: {-1*model.dual[dual_key_D]}")
+            return (-1) * model.dual[dual_key_D] - (-1) * model.dual[dual_key_S]
 
     model.p_TransportPrice = Param(
         model.s_PPUnique,
@@ -2234,15 +2305,17 @@ def PostSolve(model):
     # Producer Trucking Transport per-route Profit
     def ProducerTruckProfitINIT(model, pi, p, c, t):
         try:
-            if t in model.s_T_pi[pi]:
-                return (
-                    model.p_TransportPrice[p, c, t].value
-                    - model.p_ProducerTransportBidTruck[pi].value
-                ) * model.v_FP_truck[pi, p, c, t].value
-            else:
-                return 0
-        except:
+            # Is the variable defined here? (If it is, the constraint and price should be, too, so this check should be sufficient.)
+            v_FP_truck_key = model.v_FP_truck[pi, p, c, t]
+        except KeyError:
             return 0
+        else:
+            if v_FP_truck_key.value > 0:
+                prof = (model.p_TransportPrice[p, c, t].value - model.p_ProducerTransportBidTruck[pi].value)*v_FP_truck_key.value
+                print(f"({model.p_ProducerWellMap[p]},{model.p_ConsumerWellMap[c]},{t}): {model.p_TransportPrice[p, c, t].value} - {model.p_ProducerTransportBidTruck[pi].value})*{v_FP_truck_key.value} = {prof}")
+            return (
+                model.p_TransportPrice[p, c, t] - model.p_ProducerTransportBidTruck[pi]
+            ) * v_FP_truck_key
 
     model.p_ProducerTruckProfit = Param(
         model.s_PI,
@@ -2258,6 +2331,12 @@ def PostSolve(model):
     # Producer Piping Transport per-route Profit
     def ProducerPipelProfitINIT(model, pi, p, c, t):
         try:
+            # Is the variable defined here? (If it is, the constraint and price should be, too, so this check should be sufficient.)
+            v_FP_pipel_key = model.v_FP_pipel[pi, p, c, t]
+        except KeyError:
+            return 0
+        else:
+            """
             if t in model.s_T_pi[pi]:
                 return (
                     model.p_TransportPrice[p, c, t].value
@@ -2265,8 +2344,11 @@ def PostSolve(model):
                 ) * model.v_FP_pipel[pi, p, c, t].value
             else:
                 return 0
-        except:
-            return 0
+            """
+            return (
+                model.p_TransportPrice[p, c, t].value - model.p_ProducerTransportBidPipel[pi].value
+            ) * v_FP_pipel_key
+
 
     model.p_ProducerPipelProfit = Param(
         model.s_PI,
@@ -2302,15 +2384,17 @@ def PostSolve(model):
     # Consumer Trucking Transport per-route Profit
     def ConsumerTruckProfitINIT(model, ci, p, c, t):
         try:
-            if t in model.s_T_ci[ci]:
-                return (
-                    model.p_TransportPrice[p, c, t].value
-                    - model.p_ConsumerTransportBidTruck[ci].value
-                ) * model.v_FC_truck[ci, p, c, t].value
-            else:
-                return 0
-        except:
+            # Is the variable defined here? (If it is, the constraint and price should be, too, so this check should be sufficient.)
+            v_FC_truck_key = model.v_FC_truck[ci, p, c, t]
+        except KeyError:
             return 0
+        else:
+            if v_FC_truck_key.value > 0:
+                prof = (model.p_TransportPrice[p, c, t].value - model.p_ConsumerTransportBidTruck[ci].value)*v_FC_truck_key.value
+                print(f"({model.p_ProducerWellMap[p]},{model.p_ConsumerWellMap[c]},{t}): {model.p_TransportPrice[p, c, t].value} - {model.p_ConsumerTransportBidTruck[ci].value})*{v_FC_truck_key.value} = {prof}")
+            return (
+                model.p_TransportPrice[p, c, t] - model.p_ConsumerTransportBidTruck[ci]
+            ) * v_FC_truck_key
 
     model.p_ConsumerTruckProfit = Param(
         model.s_CI,
@@ -2326,15 +2410,14 @@ def PostSolve(model):
     # Consumer Piping Transport per-route Profit
     def ConsumerPipelProfitINIT(model, ci, p, c, t):
         try:
-            if t in model.s_T_ci[ci]:
-                return (
-                    model.p_TransportPrice[p, c, t].value
-                    - model.p_ConsumerTransportBidPipel[ci].value
-                ) * model.v_FC_pipel[ci, p, c, t].value
-            else:
-                return 0
-        except:
+            # Is the variable defined here? (If it is, the constraint and price should be, too, so this check should be sufficient.)
+            v_FC_pipel_key = model.v_FC_pipel[ci, p, c, t]
+        except KeyError:
             return 0
+        else:
+            return (
+                model.p_TransportPrice[p, c, t] - model.p_ConsumerTransportBidPipel[ci]
+            ) * v_FC_pipel_key
 
     model.p_ConsumerPipelProfit = Param(
         model.s_CI,
@@ -2367,6 +2450,67 @@ def PostSolve(model):
         doc="Consumer total combined transport profit [currency]",
     )
 
+
+    # test section:
+    params_dict = {}
+    #for param_name, param_obj in model.component_map(Param, active=True).items():
+    #    params_dict[param_name] = param_obj.extract_values()
+    #params_dict = {str(key): value for key, value in params_dict.items()}
+
+    #params_dict["Producer volume profit"] = model.p_ProducerVolumeProfit.extract_values()
+    #params_dict["Consumer volume profit"] = model.p_ConsumerVolumeProfit.extract_values()
+    #params_dict["Producer trucking profit"] = model.p_ProducerTruckProfit.extract_values()
+    #params_dict["Producer piping profit"] = model.p_ProducerPipelProfit.extract_values()
+    #params_dict["Consumer trucking profit"] = model.p_ConsumerTruckProfit.extract_values()
+    #params_dict["Consumer piping profit"] = model.p_ConsumerPipelProfit.extract_values()
+    #params_dict = {str(key): value for key, value in params_dict.items()}
+    #with open('parameters.json', 'w') as f:
+    #    json.dump(params_dict, f)
+    """
+    print("Producer Prices")
+    for key, val in model.p_ProducerNodalPrice.items():
+        if val.value != 0 and val.value is not None:
+            print(f"{model.p_ProducerNodalPrice.name}[{key}] = {val.value}")
+    print("Consumer Prices")
+    for key, val in model.p_ConsumerNodalPrice.items():
+        if val.value != 0 and val.value is not None:
+            print(f"{model.p_ConsumerNodalPrice.name}[{key}] = {val.value}")
+    #print("Transport Prices")
+    #for key, val in model.p_TransportPrice.items():
+    #    if val.value != 0 and val.value is not None:
+    #        print(f"{model.p_TransportPrice.name}[{key}] = {val.value}")
+
+    print("Producer volume profit")
+    #model.p_ProducerVolumeProfit.display()
+    for key, value in model.p_ProducerVolumeProfit.items():
+        if value.value != 0:
+            print(f"{model.p_ProducerVolumeProfit.name}[{key}] = {value.value}")
+    print("Consumer volume profit")
+    #model.p_ConsumerVolumeProfit.display()
+    for key, value in model.p_ConsumerVolumeProfit.items():
+        if value.value != 0:
+            print(f"{model.p_ConsumerVolumeProfit.name}[{key}] = {value.value}")
+    print("Producer trucking profit")
+    #model.p_ProducerTruckProfit.display()
+    for key, value in model.p_ProducerTruckProfit.items():
+        if value.value != 0:
+            print(f"{model.p_ProducerTruckProfit.name}[{key}] = {value.value}")
+    print("Producer piping profit")
+    #model.p_ProducerPipelProfit.display()
+    for key, value in model.p_ProducerPipelProfit.items():
+        if value.value != 0:
+            print(f"{model.p_ProducerPipelProfit.name}[{key}] = {value.value}")
+    print("Consumer trucking profit")
+    #model.p_ConsumerTruckProfit.display()
+    for key, value in model.p_ConsumerTruckProfit.items():
+        if value.value != 0:
+            print(f"{model.p_ConsumerTruckProfit.name}[{key}] = {value.value}")
+    print("Consuer piping profit")
+    #model.p_ConsumerPipelProfit.display()
+    for key, value in model.p_ConsumerPipelProfit.items():
+        if value.value != 0:
+            print(f"{model.p_ConsumerPipelProfit.name}[{key}] = {value.value}")
+    """
     return model
 
 
@@ -2572,6 +2716,10 @@ def OutputMatchesToUsers(matches_dir, output_dir):
     - None
     """
 
+    # Make sure the output folder is there, or create it if not
+    if not os.path.exists(output_dir):
+        os.mkdir(os.path.join(output_dir))
+
     # Load data from JSON file
     with open(matches_dir, "r") as match_data:
         match_data = json.load(match_data)  # load data as dictionary
@@ -2585,7 +2733,7 @@ def OutputMatchesToUsers(matches_dir, output_dir):
         # Get match details to export and convert to dataframe
         df_match_details = pd.DataFrame.from_dict(df_matches_s.loc[i]["Matches"])
         df_match_details.drop(
-            "Match Index", axis=1, inplace=True
+           columns = ["Match Index","Match Date Index"], axis=1, inplace=True
         )  # remove identifying information
         # Check if output folder exists
         if not os.path.exists(os.path.join(output_dir, UserID)):
@@ -2605,7 +2753,7 @@ def OutputMatchesToUsers(matches_dir, output_dir):
         # Get match details to export and convert to dataframe
         df_match_details = pd.DataFrame.from_dict(df_matches_d.loc[i]["Matches"])
         df_match_details.drop(
-            "Match Index", axis=1, inplace=True
+            columns = ["Match Index","Match Date Index"], axis=1, inplace=True
         )  # remove identifying information
         # Check if output folder exists
         if not os.path.exists(os.path.join(output_dir, UserID)):
