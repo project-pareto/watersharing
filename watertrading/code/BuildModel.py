@@ -1448,6 +1448,8 @@ def jsonize_outputs(
         for key in model.v_Supply
         if value(model.v_Supply[key]) > match_threshold
     )
+    pd.set_option('display.max_columns', None)
+    print(df_v_Supply)
     df_v_Supply_totals = pd.pivot_table(
         df_v_Supply, values="Rate", index="Supplier Index", columns=None, aggfunc="sum"
     )
@@ -2242,7 +2244,8 @@ def PostSolve(model):
             return None # return None if not index defined
         else:
             # NOTE: (-1) multiplier here for dual
-            print(f"sup: {-1*model.dual[dual_key_S]}, dem: {-1*model.dual[dual_key_D]}")
+            price = (-1) * model.dual[dual_key_D] - (-1) * model.dual[dual_key_S]
+            print(f"sup: {-1*model.dual[dual_key_S]}, dem: {-1*model.dual[dual_key_D]}, price: {price}")
             return (-1) * model.dual[dual_key_D] - (-1) * model.dual[dual_key_S]
 
     model.p_TransportPrice = Param(
