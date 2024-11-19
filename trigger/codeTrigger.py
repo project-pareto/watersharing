@@ -17,13 +17,18 @@ class EventHandler(FileSystemEventHandler):
         self.in_path_trading = os.path.abspath(os.path.expanduser(in_path_trading))
     
     def on_any_event(self, event):
+
+        event_path = os.path.abspath(event.src_path)
+
         if event.event_type == 'created' and event.src_path.endswith('.json'):
-            if self.ex_path_sharing in event.src_path:
+            if self.ex_path_sharing in event_path:
                 print("Running water sharing function")  # Debug line for path match
                 run_watersharing(self.in_path_sharing, self.ex_path_sharing)
-            elif self.ex_path_trading in event.src_path:
+            elif self.ex_path_trading in event_path:
                 print("Running water trading function")  # Debug line for path match
                 run_watertrading(self.in_path_trading, self.ex_path_trading)
+            else:
+                print("DIDNT MATCH")
 
 # Load paths from config.yaml
 def load_config(config_file_path, mode):
@@ -52,6 +57,8 @@ if __name__ == "__main__":
         path = os.path.expanduser(path_var)
         if not os.path.exists(path):
             raise FileNotFoundError(f"The path '{path_var}' does not exist.")
+
+    print(ex_path_sharing)
 
     event_handler = EventHandler(in_path_sharing, ex_path_sharing, in_path_trading, ex_path_trading) 
     observer = Observer()

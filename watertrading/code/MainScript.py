@@ -8,6 +8,7 @@ import pyomo.environ
 from pyomo.environ import value
 from pyomo.opt import SolverFactory
 import BuildModel
+from Utilities import CreateEmptyOutputJSON
 from os import getcwd
 from os.path import join
 
@@ -26,6 +27,7 @@ def run_optimization_models(
     Update_distance_matrix=True,
     filter_by_date=None,
 ):
+
     # Set up file path names
     request_dir = join(data_dir, file_names["requests"])
     distance_dir = join(output_dir, file_names["distance"])
@@ -69,6 +71,12 @@ def run_optimization_models(
     # solver = SolverFactory("gurobi")
     solver = SolverFactory("glpk")
     results = solver.solve(water_sharing, tee=True)
+    # Check if market is dry; if so, return an empty match file
+    if water_sharing.objective() <= 0: # solvers sometimes return -0.
+        print("No matches!")
+        CreateEmptyOutputJSON(matches_dir)
+        return None
+    # else:
     results.write(format="json")
 
     # Output result
@@ -77,7 +85,7 @@ def run_optimization_models(
         water_sharing = BuildModel.PostSolve(water_sharing)
         BuildModel.jsonize_outputs(water_sharing, matches_dir)
         BuildModel.OutputMatchesToUsers(matches_dir, join(output_dir,"match-detail"))
-        # BuildModel.jsonize_profits(water_sharing, profits_dir)
+        BuildModel.jsonize_profits(water_sharing, profits_dir)
         # BuildModel.DataViews(water_sharing, data_dir)
         # BuildModel.PostSolveViews(water_sharing, data_dir)
         return None

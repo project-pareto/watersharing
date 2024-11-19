@@ -451,3 +451,85 @@ def DFRateSum(df):
         return 0
     else:
         raise Exception("Please ensure that a dataframe has been input and has a \"Rate\" column.")
+
+
+##################################################
+def CreateEmptyOutputJSON(matches_dir):
+    """
+    Creates an empty JSON output file in the case there are no trades
+    Inputs:
+    - matches_dir: output file location and name
+    Outputs:
+    - None
+    """
+    d_supply_match = {
+        "Index": [],
+        "Pair Index": [],
+        "Operator": [],
+        "UserID": [],
+        "Wellpad": [],
+        "Longitude": [],
+        "Latitude": [],
+        "Start Date": [],
+        "End Date": [],
+        "Supply Rate (bpd)": [],
+        "Supplier Bid (USD/bbl)": [],
+        "Bid Type": [],
+        "Trucks Accepted": [],
+        "Pipes Accepted": [],
+        "Truck Max Dist (mi)": [],
+        "Trucking Capacity (bpd)": [],
+        "Truck Transport Bid (USD/bbl)": [],
+        "Pipe Max Dist (mi)": [],
+        "Pipeline Capacity (bpd)": [],
+        "Pipe Transport Bid (USD/bbl)": [],
+        "Matches": [],
+        "Match Total Volume (bbl)":[],
+        "Match Total Value (USD)":[],
+    }
+
+    d_demand_match = {
+        "Index": [],
+        "Pair Index": [],
+        "Operator": [],
+        "UserID": [],
+        "Wellpad": [],
+        "Longitude": [],
+        "Latitude": [],
+        "Start Date": [],
+        "End Date": [],
+        "Demand Rate (bpd)": [],
+        "Consumer Bid (USD/bbl)": [],
+        "Bid Type": [],
+        "Trucks Accepted": [],
+        "Pipes Accepted": [],
+        "Truck Max Dist (mi)": [],
+        "Trucking Capacity (bpd)": [],
+        "Truck Transport Bid (USD/bbl)": [],
+        "Pipe Max Dist (mi)": [],
+        "Pipeline Capacity (bpd)": [],
+        "Pipe Transport Bid (USD/bbl)": [],
+        "Matches": [],
+        "Match Total Volume (bbl)":[],
+        "Match Total Value (USD)":[],
+    }
+
+    # convert dictionaries to dataframes
+    df_supply_match = pd.DataFrame.from_dict(d_supply_match)
+    df_demand_match = pd.DataFrame.from_dict(d_demand_match)
+
+    # convert dataframes to dictionaries for easy json output (and correct format)
+    d_supply_match_out = df_supply_match.to_dict(orient="records")
+    d_demand_match_out = df_demand_match.to_dict(orient="records")
+
+    with open(matches_dir, "w") as data_file:
+        json.dump(
+            {
+                "Supply": d_supply_match_out,
+                "Demand": d_demand_match_out,
+            },
+            data_file,
+            indent=4,
+            default=str,
+        )
+    return None
