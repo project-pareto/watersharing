@@ -23,10 +23,16 @@ class EventHandler(FileSystemEventHandler):
         if event.event_type == 'created' and event.src_path.endswith('.json'):
             if self.ex_path_sharing in event_path:
                 print("Running water sharing function")  # Debug line for path match
-                run_watersharing(self.in_path_sharing, self.ex_path_sharing)
+                try:
+                    run_watersharing(self.in_path_sharing, self.ex_path_sharing)
+                except Exception as e:
+                    print(f"Error during water sharing function: {e}")
             elif self.ex_path_trading in event_path:
                 print("Running water trading function")  # Debug line for path match
-                run_watertrading(self.in_path_trading, self.ex_path_trading)
+                try:
+                    run_watertrading(self.in_path_trading, self.ex_path_trading)
+                except Exception as e:
+                    print(f"Error during water trading function: {e}")
             else:
                 print("DIDNT MATCH")
 
