@@ -533,3 +533,47 @@ def CreateEmptyOutputJSON(matches_dir):
             default=str,
         )
     return None
+
+
+def dev_check_outputs(model):
+    """
+    A function for developers to check price and profit values; just prints a handful of useful values
+    """
+    # dev_check section:
+    print("Producer Prices")
+    for key, val in model.p_ProducerNodalPrice.items():
+        if val.value != 0 and val.value is not None:
+            print(f"{model.p_ProducerNodalPrice.name}[{key}] = {val.value}")
+    print("Consumer Prices")
+    for key, val in model.p_ConsumerNodalPrice.items():
+        if val.value != 0 and val.value is not None:
+            print(f"{model.p_ConsumerNodalPrice.name}[{key}] = {val.value}")
+    #print("Transport Prices") # This prints a lot of lines. Use with caution.
+    #for key, val in model.p_TransportPrice.items():
+    #    if val.value != 0 and val.value is not None:
+    #        print(f"{model.p_TransportPrice.name}[{key}] = {val.value}")
+    print("Producer volume profit")
+    for key, value in model.p_ProducerVolumeProfit.items():
+        if value.value != 0:
+            print(f"{model.p_ProducerVolumeProfit.name}[{key}] = {value.value}")
+    print("Consumer volume profit")
+    for key, value in model.p_ConsumerVolumeProfit.items():
+        if value.value != 0:
+            print(f"{model.p_ConsumerVolumeProfit.name}[{key}] = {value.value}")
+    print("Producer trucking profit")
+    for key, value in model.p_ProducerTruckProfit.items():
+        if value.value != 0:
+            print(f"{model.p_ProducerTruckProfit.name}[{key}] = {value.value}")
+    print("Producer piping profit")
+    for key, value in model.p_ProducerPipelProfit.items():
+        if value.value != 0:
+            print(f"{model.p_ProducerPipelProfit.name}[{key}] = {value.value}")
+    print("Consumer trucking profit")
+    for key, value in model.p_ConsumerTruckProfit.items():
+        if value.value != 0:
+            print(f"{model.p_ConsumerTruckProfit.name}[{key}] = {value.value}")
+    print("Consumer piping profit")
+    for key, value in model.p_ConsumerPipelProfit.items():
+        if value.value != 0:
+            print(f"{model.p_ConsumerPipelProfit.name}[{key}] = {value.value}")
+    return None
