@@ -1,3 +1,16 @@
+#####################################################################################################
+# PARETO was produced under the DOE Produced Water Application for Beneficial Reuse Environmental
+# Impact and Treatment Optimization (PARETO), and is copyright (c) 2021-2024 by the software owners:
+# The Regents of the University of California, through Lawrence Berkeley National Laboratory, et al.
+# All rights reserved.
+#
+# NOTICE. This Software was developed under funding from the U.S. Department of Energy and the U.S.
+# Government consequently retains certain rights. As such, the U.S. Government has been granted for
+# itself and others acting on its behalf a paid-up, nonexclusive, irrevocable, worldwide license in
+# the Software to reproduce, distribute copies to the public, prepare derivative works, and perform
+# publicly and display publicly, and to permit others to do so.
+#####################################################################################################
+
 ##################################################
 # PYTHON IMPORTS
 import os.path
@@ -37,6 +50,7 @@ from Utilities import (
     DFRateSum,
     dev_check_outputs,
 )
+import WTQuality
 
 ##################################################
 # CREATE CONFIG DICTIONARY
@@ -712,6 +726,9 @@ def create_model(
         doc="Valid time points for each pi in s_PI",
     )
 
+    ### Quality setup
+    match_qual_dict = {}
+
     # Set LP(pi,p,c,t) of arcs owned & operated by producers PI
     L_LP_truck = (
         []
@@ -729,6 +746,7 @@ def create_model(
     for pi in list(model.s_PI.ordered_data()):
         for ci in list(model.s_CI.ordered_data()):
             # LP_truck
+            quality_check = WTQuality.match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict)
             if (
                 model.p_ProducerPadUnique[pi]
                 != model.p_ConsumerPadUnique[ci]  # possible edge case
@@ -737,6 +755,7 @@ def create_model(
                 ].value
                 <= model.p_ProducerMaxRangeTruck[pi].value
                 and model.p_ProducerTransportCapacityTruck[pi].value >= 0
+                and quality_check
             ):
                 for tp in model.s_T_pi[pi]:
                     for tc in model.s_T_ci[ci]:
@@ -750,6 +769,7 @@ def create_model(
                                 )
                             )
             # LP_pipel
+            quality_check = WTQuality.match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict)
             if (
                 model.p_ProducerPadUnique[pi]
                 != model.p_ConsumerPadUnique[ci]  # possible edge case
@@ -758,6 +778,7 @@ def create_model(
                 ].value
                 <= model.p_ProducerMaxRangePipel[pi].value
                 and model.p_ProducerTransportCapacityPipel[pi].value >= 0
+                and quality_check
             ):
                 for tp in model.s_T_pi[pi]:
                     for tc in model.s_T_ci[ci]:
@@ -771,6 +792,7 @@ def create_model(
                                 )
                             )
             # LC_truck
+            quality_check = WTQuality.match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict)
             if (
                 model.p_ProducerPadUnique[pi]
                 != model.p_ConsumerPadUnique[ci]  # possible edge case
@@ -779,6 +801,7 @@ def create_model(
                 ].value
                 <= model.p_ConsumerMaxRangeTruck[ci].value
                 and model.p_ConsumerTransportCapacityTruck[ci].value >= 0
+                and quality_check
             ):
                 for tp in model.s_T_pi[pi]:
                     for tc in model.s_T_ci[ci]:
@@ -792,6 +815,7 @@ def create_model(
                                 )
                             )
             # LC_pipel
+            quality_check = WTQuality.match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict)
             if (
                 model.p_ProducerPadUnique[pi]
                 != model.p_ConsumerPadUnique[ci]  # possible edge case
@@ -800,6 +824,7 @@ def create_model(
                 ].value
                 <= model.p_ConsumerMaxRangePipel[ci].value
                 and model.p_ConsumerTransportCapacityPipel[ci].value >= 0
+                and quality_check
             ):
                 for tp in model.s_T_pi[pi]:
                     for tc in model.s_T_ci[ci]:
@@ -828,6 +853,7 @@ def create_model(
     model.s_LC_pipel = Set(
         dimen=4, initialize=L_LC_pipel, doc="Valid Consumer Pipeline Arcs"
     )
+    model.match_qual_dict = match_qual_dict # will need this later; easiest way is to attach it to the model object
     print("Primary arc sets constructed")
 
     # Sets for arcs inbound on (cp,t)
@@ -1801,7 +1827,7 @@ def jsonize_outputs(
                             d_match_detail["Net Balance Type"].append(
                                 NetBalanceType(match_net_value)
                             )
-                            d_match_detail["Quality"].append(temp_qual_val)
+                            d_match_detail["Quality"].append(model.match_qual_dict[pi,model.p_ConsumerWellIDMap[c],"supply side"])
                         # end if not [all empty] here
                     # Add integrator terms
                     d_supply_match["Match Total Volume (bbl)"].append(sum(d_match_detail["Match Volume"]))
@@ -2084,7 +2110,7 @@ def jsonize_outputs(
                             d_match_detail["Net Balance Type"].append(
                                 NetBalanceType(match_net_value)
                             )
-                            d_match_detail["Quality"].append(temp_qual_val)
+                            d_match_detail["Quality"].append(model.match_qual_dict[model.p_ProducerWellIDMap[p],ci,"demand side"])
                         # end if not [all empty] here
                     # Add integrator terms
                     d_demand_match["Match Total Volume (bbl)"].append(sum(d_match_detail["Match Volume"]))
