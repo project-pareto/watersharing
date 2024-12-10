@@ -125,6 +125,9 @@ def match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict):
         df_consumer.loc[ci, "Hydrogen Sulfide"],
         df_consumer.loc[ci, "NORM"]
     ]
+    # Cast numerical entries to floats
+    producer_qualities = [float(producer_qualities[i]) if producer_qualities[i] != "" else "" for i in range(len(producer_qualities))]
+    consumer_qualities = [float(consumer_qualities[i]) if consumer_qualities[i] != "" else "" for i in range(len(consumer_qualities))]
     producer_quality_constraints = [
         df_producer.loc[pi, "TSS Constraint"],
         df_producer.loc[pi, "TDS Constraint"],
@@ -156,12 +159,12 @@ def match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict):
         match_qual_dict[pi,ci,"supply side"] = "Best match did not include quality details"
         match_qual_dict[pi,ci,"demand side"] = "Best match did not include quality details"
         return True
-    elif producer_quality_check and consumer_quality_check:
+    else: #equivalent to: elif producer_quality_check and consumer_quality_check:
         # Both included quality data; now check whether quality specs overlap, then evaluate match potential
         if not quality_overlap_check(producer_qualities,consumer_qualities):
             # If there is no quality overlap, allow match but note issue
-            match_qual_dict[pi,ci,"supply side"] = "Best match did not include quality details"
-            match_qual_dict[pi,ci,"demand side"] = "Best match did not include quality details"
+            match_qual_dict[pi,ci,"supply side"] = "Best match did not include quality details for specified disclosures"
+            match_qual_dict[pi,ci,"demand side"] = "Best match did not include quality details for specified disclosures"
             return True
         else: # there is a quality overlap, we need a full check
             # start quality loop
@@ -169,12 +172,12 @@ def match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict):
                 if producer_qualities[i] != "" and consumer_qualities[i] != "":
                     # check this instance for potential conflict
                     if consumer_quality_constraints[i] == "lt":
-                        if producer_qualities[i] > consumer_qualities[i]:
+                        if (producer_qualities[i] > consumer_qualities[i]):
                             # producer spec violates consumer spec
                             return False
                         #else, continue
                     elif consumer_quality_constraints[i] == "gt":
-                        if producer_qualities[i] < consumer_qualities[i]:
+                        if (producer_qualities[i] < consumer_qualities[i]):
                             # producer spec violates consumer spec
                             return False
                         #else, continue
