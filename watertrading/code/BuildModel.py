@@ -1100,7 +1100,7 @@ def create_model(
 
     ### Variable Bounds
     # Producer trucking bound
-    def p_FP_truck_UB_init(model, pi, p, c, t):
+    def p_FP_truck_UB_init(model, pi, p, c, tp):
         if tp in model.s_T_pi[pi]:
             return model.p_ProducerTransportCapacityTruck[pi]
         else:
@@ -1115,12 +1115,13 @@ def create_model(
         units=model.model_units["volume_time"],
         doc="Maximum producer trucking capacity between nodes [volume_time]",
     )
+    model.p_FP_truck_UB.pprint()
 
     for (pi, p, c, t) in model.s_LP_truck:
         model.v_FP_truck[pi, p, c, t].setub(model.p_FP_truck_UB[pi, p, c, t])
 
     # Producer piping bound
-    def p_FP_pipel_UB_init(model, pi, p, c, t):
+    def p_FP_pipel_UB_init(model, pi, p, c, tp):
         if tp in model.s_T_pi[pi]:
             return model.p_ProducerTransportCapacityPipel[pi]
         else:
@@ -1140,7 +1141,7 @@ def create_model(
         model.v_FP_pipel[pi, p, c, t].setub(model.p_FP_pipel_UB[pi, p, c, t])
 
     # Consumer trucking bound
-    def p_FC_truck_UB_init(model, ci, p, c, t):
+    def p_FC_truck_UB_init(model, ci, p, c, tc):
         if tc in model.s_T_ci[ci]:
             return model.p_ConsumerTransportCapacityTruck[ci]
         else:
@@ -1160,7 +1161,7 @@ def create_model(
         model.v_FC_truck[ci, p, c, t].setub(model.p_FC_truck_UB[ci, p, c, t])
 
     # Consumer piping bound
-    def p_FC_pipel_UB_init(model, ci, p, c, t):
+    def p_FC_pipel_UB_init(model, ci, p, c, tc):
         if tc in model.s_T_ci[ci]:
             return model.p_ConsumerTransportCapacityPipel[ci]
         else:
