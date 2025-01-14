@@ -1115,7 +1115,6 @@ def create_model(
         units=model.model_units["volume_time"],
         doc="Maximum producer trucking capacity between nodes [volume_time]",
     )
-    model.p_FP_truck_UB.pprint()
 
     for (pi, p, c, t) in model.s_LP_truck:
         model.v_FP_truck[pi, p, c, t].setub(model.p_FP_truck_UB[pi, p, c, t])

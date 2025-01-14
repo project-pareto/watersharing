@@ -125,7 +125,7 @@ def match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict):
         df_consumer.loc[ci, "Hydrogen Sulfide"],
         df_consumer.loc[ci, "NORM"]
     ]
-    # Cast numerical entries to floats
+    # Cast numerical entries to floats, unless using the "" value for no entry
     producer_qualities = [float(producer_qualities[i]) if producer_qualities[i] != "" else "" for i in range(len(producer_qualities))]
     consumer_qualities = [float(consumer_qualities[i]) if consumer_qualities[i] != "" else "" for i in range(len(consumer_qualities))]
     producer_quality_constraints = [
