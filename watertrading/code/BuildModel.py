@@ -1,3 +1,16 @@
+#####################################################################################################
+# PARETO was produced under the DOE Produced Water Application for Beneficial Reuse Environmental
+# Impact and Treatment Optimization (PARETO), and is copyright (c) 2021-2024 by the software owners:
+# The Regents of the University of California, through Lawrence Berkeley National Laboratory, et al.
+# All rights reserved.
+#
+# NOTICE. This Software was developed under funding from the U.S. Department of Energy and the U.S.
+# Government consequently retains certain rights. As such, the U.S. Government has been granted for
+# itself and others acting on its behalf a paid-up, nonexclusive, irrevocable, worldwide license in
+# the Software to reproduce, distribute copies to the public, prepare derivative works, and perform
+# publicly and display publicly, and to permit others to do so.
+#####################################################################################################
+
 ##################################################
 # PYTHON IMPORTS
 import os.path
@@ -35,7 +48,9 @@ from Utilities import (
     ConsumerBalanceType,
     NetBalanceType,
     DFRateSum,
+    dev_check_outputs,
 )
+import WTQuality
 
 ##################################################
 # CREATE CONFIG DICTIONARY
@@ -92,7 +107,7 @@ def get_data(
 
     input_dir = os.path.dirname(__file__)
     if not os.path.exists(input_dir):
-        print("Data directory not found")
+        raise Exception("Data directory does not exist as received! Please check the data path.")
 
     # Pull in JSON request data
     with open(request_dir, "r") as read_file:
@@ -241,17 +256,6 @@ def create_model(
     model.s_PI = Set(initialize=model.df_producer.index, doc="Producer entry index")
 
     model.s_CI = Set(initialize=model.df_consumer.index, doc="Consumer entry index")
-
-    # [REMOVE]
-    # model.s_PP = Set(
-    #    initialize=model.df_producer["Wellpad"],
-    #    doc="Producer wellpad"
-    # )
-
-    # model.s_CP = Set(
-    #    initialize=model.df_consumer["Wellpad"],
-    #    doc="Consumer wellpad"
-    # )
 
     model.s_PPUnique = Set(
         initialize=model.df_producer["WellpadUnique"],
@@ -722,6 +726,9 @@ def create_model(
         doc="Valid time points for each pi in s_PI",
     )
 
+    ### Quality setup
+    match_qual_dict = {}
+
     # Set LP(pi,p,c,t) of arcs owned & operated by producers PI
     L_LP_truck = (
         []
@@ -739,6 +746,7 @@ def create_model(
     for pi in list(model.s_PI.ordered_data()):
         for ci in list(model.s_CI.ordered_data()):
             # LP_truck
+            quality_check = WTQuality.match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict)
             if (
                 model.p_ProducerPadUnique[pi]
                 != model.p_ConsumerPadUnique[ci]  # possible edge case
@@ -746,6 +754,8 @@ def create_model(
                     Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
                 <= model.p_ProducerMaxRangeTruck[pi].value
+                and model.p_ProducerTransportCapacityTruck[pi].value >= 0
+                and quality_check
             ):
                 for tp in model.s_T_pi[pi]:
                     for tc in model.s_T_ci[ci]:
@@ -759,6 +769,7 @@ def create_model(
                                 )
                             )
             # LP_pipel
+            quality_check = WTQuality.match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict)
             if (
                 model.p_ProducerPadUnique[pi]
                 != model.p_ConsumerPadUnique[ci]  # possible edge case
@@ -766,6 +777,8 @@ def create_model(
                     Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
                 <= model.p_ProducerMaxRangePipel[pi].value
+                and model.p_ProducerTransportCapacityPipel[pi].value >= 0
+                and quality_check
             ):
                 for tp in model.s_T_pi[pi]:
                     for tc in model.s_T_ci[ci]:
@@ -779,6 +792,7 @@ def create_model(
                                 )
                             )
             # LC_truck
+            quality_check = WTQuality.match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict)
             if (
                 model.p_ProducerPadUnique[pi]
                 != model.p_ConsumerPadUnique[ci]  # possible edge case
@@ -786,6 +800,8 @@ def create_model(
                     Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
                 <= model.p_ConsumerMaxRangeTruck[ci].value
+                and model.p_ConsumerTransportCapacityTruck[ci].value >= 0
+                and quality_check
             ):
                 for tp in model.s_T_pi[pi]:
                     for tc in model.s_T_ci[ci]:
@@ -799,6 +815,7 @@ def create_model(
                                 )
                             )
             # LC_pipel
+            quality_check = WTQuality.match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict)
             if (
                 model.p_ProducerPadUnique[pi]
                 != model.p_ConsumerPadUnique[ci]  # possible edge case
@@ -806,6 +823,8 @@ def create_model(
                     Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
                 <= model.p_ConsumerMaxRangePipel[ci].value
+                and model.p_ConsumerTransportCapacityPipel[ci].value >= 0
+                and quality_check
             ):
                 for tp in model.s_T_pi[pi]:
                     for tc in model.s_T_ci[ci]:
@@ -834,6 +853,7 @@ def create_model(
     model.s_LC_pipel = Set(
         dimen=4, initialize=L_LC_pipel, doc="Valid Consumer Pipeline Arcs"
     )
+    model.match_qual_dict = match_qual_dict # will need this later; easiest way is to attach it to the model object
     print("Primary arc sets constructed")
 
     # Sets for arcs inbound on (cp,t)
@@ -870,7 +890,7 @@ def create_model(
     def s_LC_truck_in_ct_INIT(model, cp, tc):
         elems = []
         for (ci, p, c, t) in model.s_LC_truck.ordered_data():
-            if c == cp and t == tc:
+            if c == cp and t == tc and model.p_Producer_Trucks_Accepted[p]:
                 elems.append((ci, p, c, t))
         return elems
 
@@ -885,7 +905,7 @@ def create_model(
     def s_LC_pipel_in_ct_INIT(model, cp, tc):
         elems = []
         for (ci, p, c, t) in model.s_LC_pipel.ordered_data():
-            if c == cp and t == tc:
+            if c == cp and t == tc and model.p_Producer_Pipes_Accepted[p]:
                 elems.append((ci, p, c, t))
         return elems
 
@@ -902,7 +922,7 @@ def create_model(
     def s_LP_truck_out_pt_INIT(model, pp, tp):
         elems = []
         for (pi, p, c, t) in model.s_LP_truck.ordered_data():
-            if p == pp and t == tp:
+            if p == pp and t == tp and model.p_Consumer_Trucks_Accepted[c]:
                 elems.append((pi, p, c, t))
         return elems
 
@@ -917,7 +937,7 @@ def create_model(
     def s_LP_pipel_out_pt_INIT(model, pp, tp):
         elems = []
         for (pi, p, c, t) in model.s_LP_pipel.ordered_data():
-            if p == pp and t == tp:
+            if p == pp and t == tp and model.p_Consumer_Pipes_Accepted[c]:
                 elems.append((pi, p, c, t))
         return elems
 
@@ -1080,7 +1100,7 @@ def create_model(
 
     ### Variable Bounds
     # Producer trucking bound
-    def p_FP_truck_UB_init(model, pi, p, c, t):
+    def p_FP_truck_UB_init(model, pi, p, c, tp):
         if tp in model.s_T_pi[pi]:
             return model.p_ProducerTransportCapacityTruck[pi]
         else:
@@ -1100,7 +1120,7 @@ def create_model(
         model.v_FP_truck[pi, p, c, t].setub(model.p_FP_truck_UB[pi, p, c, t])
 
     # Producer piping bound
-    def p_FP_pipel_UB_init(model, pi, p, c, t):
+    def p_FP_pipel_UB_init(model, pi, p, c, tp):
         if tp in model.s_T_pi[pi]:
             return model.p_ProducerTransportCapacityPipel[pi]
         else:
@@ -1120,7 +1140,7 @@ def create_model(
         model.v_FP_pipel[pi, p, c, t].setub(model.p_FP_pipel_UB[pi, p, c, t])
 
     # Consumer trucking bound
-    def p_FC_truck_UB_init(model, ci, p, c, t):
+    def p_FC_truck_UB_init(model, ci, p, c, tc):
         if tc in model.s_T_ci[ci]:
             return model.p_ConsumerTransportCapacityTruck[ci]
         else:
@@ -1140,7 +1160,7 @@ def create_model(
         model.v_FC_truck[ci, p, c, t].setub(model.p_FC_truck_UB[ci, p, c, t])
 
     # Consumer piping bound
-    def p_FC_pipel_UB_init(model, ci, p, c, t):
+    def p_FC_pipel_UB_init(model, ci, p, c, tc):
         if tc in model.s_T_ci[ci]:
             return model.p_ConsumerTransportCapacityPipel[ci]
         else:
@@ -1448,8 +1468,6 @@ def jsonize_outputs(
         for key in model.v_Supply
         if value(model.v_Supply[key]) > match_threshold
     )
-    pd.set_option('display.max_columns', None)
-    print(df_v_Supply)
     df_v_Supply_totals = pd.pivot_table(
         df_v_Supply, values="Rate", index="Supplier Index", columns=None, aggfunc="sum"
     )
@@ -1563,7 +1581,7 @@ def jsonize_outputs(
                     ]
                 else: # if it is empty
                     df_FC_truck_filter = pd.DataFrame() # passing an empty dataframe is the simplest way to proceed
-                if not df_FP_pipel.empty:
+                if not df_FC_pipel.empty:
                     df_FC_pipel_filter = df_FC_pipel.loc[
                         (df_FC_pipel["Supplier Wellpad"] == p)
                         & (df_FC_pipel["Consumer Wellpad"] == c)
@@ -1651,12 +1669,12 @@ def jsonize_outputs(
                         "Providing Piping Volume": [],
                         "Providing Piping Price": [],
                         "Providing Piping Value": [],
-                        "Purchasing Trucking Volume": [],
-                        "Purchasing Trucking Price": [],
-                        "Purchasing Trucking Value": [],
-                        "Purchasing Piping Volume": [],
-                        "Purchasing Piping Price": [],
-                        "Purchasing Piping Value": [],
+                        "Obtaining Trucking Volume": [], # edge case; not necessarily a "purchase"
+                        #"Purchasing Trucking Price": [],
+                        #"Purchasing Trucking Value": [],
+                        "Obtaining Piping Volume": [],
+                        #"Purchasing Piping Price": [],
+                        #"Purchasing Piping Value": [],
                         "Net Value": [],
                         "Net Balance Type": [],
                         "Quality": [],
@@ -1704,40 +1722,36 @@ def jsonize_outputs(
                             and df_FC_truck_filter_t.empty
                             and df_FC_pipel_filter_t.empty
                         ):
-                            # calculations
+                            # calculations NOTE: for supplier, negative price means paying, positive means getting paid, so the negative is consistent
                             FP_truck = DFRateSum(df_FP_truck_filter_t)
                             FP_pipel = DFRateSum(df_FP_pipel_filter_t)
                             FC_truck = DFRateSum(df_FC_truck_filter_t)
                             FC_pipel = DFRateSum(df_FC_pipel_filter_t)
                             match_volume = FP_truck + FP_pipel + FC_truck + FC_pipel
                             match_price = value(model.p_ProducerNodalPrice[p, t])
-                            match_value = match_volume * match_price
-                            match_net_value = match_value + (
-                                FP_truck + FP_pipel - FC_truck - FC_pipel
-                            ) * model.p_TransportPrice[p, c, t].value
+                            match_value = match_volume * match_price # nodal price times volume
+                            match_net_value = match_volume * match_price + (FP_truck + FP_pipel) * abs(model.p_TransportPrice[p, c, t].value) # match price*volume + value of provided transport
                             # record entries
                             d_match_detail["Match Index"].append(pi + "-" + c + "-" + t)
                             d_match_detail["Match Date Index"].append(t)
                             d_match_detail["Match Date"].append(model.d_T[t])
                             d_match_detail["Match Volume"].append(match_volume)
-                            d_match_detail["Match Price"].append(match_price)
-                            d_match_detail["Match Value"].append(match_value)
-                            # TODO: make match values absolute; for now will use negatives for troubleshooting
+                            d_match_detail["Match Price"].append(abs(match_price)) # don't print negatives
+                            d_match_detail["Match Value"].append(abs(match_value)) # don't print negatives
                             d_match_detail["Match Balance Type"].append(
                                 SupplierBalanceType(match_value)
                             )
                             if (
                                 FP_truck > 0
-                            ):  # NOTE: Providing and purchasing transport are relative to the user
-                                # TODO: make transport values absolute; for now negatives will help with troubleshooting
+                            ):
                                 d_match_detail["Providing Trucking Volume"].append(
                                     FP_truck
                                 )
                                 d_match_detail["Providing Trucking Price"].append(
-                                    model.p_TransportPrice[p, c, t].value
+                                    abs(model.p_TransportPrice[p, c, t].value)
                                 )
                                 d_match_detail["Providing Trucking Value"].append(
-                                    FP_truck * model.p_TransportPrice[p, c, t].value
+                                    FP_truck * abs(model.p_TransportPrice[p, c, t].value)
                                 )
                             else:
                                 d_match_detail["Providing Trucking Volume"].append(
@@ -1770,50 +1784,50 @@ def jsonize_outputs(
                                     na_string
                                 )
                             if FC_truck > 0:
-                                d_match_detail["Purchasing Trucking Volume"].append(
+                                d_match_detail["Obtaining Trucking Volume"].append(
                                     FC_truck
                                 )
-                                d_match_detail["Purchasing Trucking Price"].append(
-                                    model.p_TransportPrice[p, c, t].value
-                                )
-                                d_match_detail["Purchasing Trucking Value"].append(
-                                    FC_truck * model.p_TransportPrice[p, c, t].value
-                                )
+                                #d_match_detail["Purchasing Trucking Price"].append(
+                                #    model.p_TransportPrice[p, c, t].value
+                                #)
+                                #d_match_detail["Purchasing Trucking Value"].append(
+                                #    FC_truck * model.p_TransportPrice[p, c, t].value
+                                #)
                             else:
-                                d_match_detail["Purchasing Trucking Volume"].append(
+                                d_match_detail["Obtaining Trucking Volume"].append(
                                     na_string
                                 )
-                                d_match_detail["Purchasing Trucking Price"].append(
-                                    na_string
-                                )
-                                d_match_detail["Purchasing Trucking Value"].append(
-                                    na_string
-                                )
+                                #d_match_detail["Purchasing Trucking Price"].append(
+                                #    na_string
+                                #)
+                                #d_match_detail["Purchasing Trucking Value"].append(
+                                #    na_string
+                                #)
                             if FC_pipel > 0:
-                                d_match_detail["Purchasing Piping Volume"].append(
+                                d_match_detail["Obtaining Piping Volume"].append(
                                     FC_pipel
                                 )
-                                d_match_detail["Purchasing Piping Price"].append(
-                                    model.p_TransportPrice[p, c, t].value
-                                )
-                                d_match_detail["Purchasing Piping Value"].append(
-                                    FC_pipel * model.p_TransportPrice[p, c, t].value
-                                )
+                                #d_match_detail["Purchasing Piping Price"].append(
+                                #    model.p_TransportPrice[p, c, t].value
+                                #)
+                                #d_match_detail["Purchasing Piping Value"].append(
+                                #    FC_pipel * model.p_TransportPrice[p, c, t].value
+                                #)
                             else:
-                                d_match_detail["Purchasing Piping Volume"].append(
+                                d_match_detail["Obtaining Piping Volume"].append(
                                     na_string
                                 )
-                                d_match_detail["Purchasing Piping Price"].append(
-                                    na_string
-                                )
-                                d_match_detail["Purchasing Piping Value"].append(
-                                    na_string
-                                )
-                            d_match_detail["Net Value"].append(match_net_value)
+                                #d_match_detail["Purchasing Piping Price"].append(
+                                #    na_string
+                                #)
+                                #d_match_detail["Purchasing Piping Value"].append(
+                                #    na_string
+                                #)
+                            d_match_detail["Net Value"].append(abs(match_net_value)) # don't print negatives
                             d_match_detail["Net Balance Type"].append(
                                 NetBalanceType(match_net_value)
                             )
-                            d_match_detail["Quality"].append(temp_qual_val)
+                            d_match_detail["Quality"].append(model.match_qual_dict[pi,model.p_ConsumerWellIDMap[c],"supply side"])
                         # end if not [all empty] here
                     # Add integrator terms
                     d_supply_match["Match Total Volume (bbl)"].append(sum(d_match_detail["Match Volume"]))
@@ -1938,12 +1952,12 @@ def jsonize_outputs(
                         "Providing Piping Volume": [],
                         "Providing Piping Price": [],
                         "Providing Piping Value": [],
-                        "Purchasing Trucking Volume": [],
-                        "Purchasing Trucking Price": [],
-                        "Purchasing Trucking Value": [],
-                        "Purchasing Piping Volume": [],
-                        "Purchasing Piping Price": [],
-                        "Purchasing Piping Value": [],
+                        "Obtaining Trucking Volume": [],
+                        #"Purchasing Trucking Price": [],
+                        #"Purchasing Trucking Value": [],
+                        "Obtaining Piping Volume": [],
+                        #"Purchasing Piping Price": [],
+                        #"Purchasing Piping Value": [],
                         "Net Value": [],
                         "Net Balance Type": [],
                         "Quality": [],
@@ -1991,32 +2005,28 @@ def jsonize_outputs(
                             and df_FC_truck_filter_t.empty
                             and df_FC_pipel_filter_t.empty
                         ):
-                            # calculations
+                            # calculations NOTE: for consumer, negative price means getting paid, positive means paying, so the negative is logically reversed
                             FP_truck = DFRateSum(df_FP_truck_filter_t)
                             FP_pipel = DFRateSum(df_FP_pipel_filter_t)
                             FC_truck = DFRateSum(df_FC_truck_filter_t)
                             FC_pipel = DFRateSum(df_FC_pipel_filter_t)
                             match_volume = FP_truck + FP_pipel + FC_truck + FC_pipel
-                            match_price = value(model.p_ConsumerNodalPrice[c, t])
-                            match_value = match_volume * match_price
-                            match_net_value = match_value + (
-                                -FP_truck - FP_pipel + FC_truck + FC_pipel
-                            ) * model.p_TransportPrice[p, c, t].value
+                            match_price = -1*value(model.p_ConsumerNodalPrice[c, t]) # to correct the price logic
+                            match_value = match_volume * match_price # nodal price times volume
+                            match_net_value = match_volume * match_price + (FC_truck + FC_pipel) * abs(model.p_TransportPrice[p, c, t].value) # match price*volume + value of provided transport
                             # record entries
                             d_match_detail["Match Index"].append(ci + "-" + p + "-" + t)
                             d_match_detail["Match Date Index"].append(t)
                             d_match_detail["Match Date"].append(model.d_T[t])
                             d_match_detail["Match Volume"].append(match_volume)
-                            d_match_detail["Match Price"].append(match_price)
-                            d_match_detail["Match Value"].append(match_value)
-                            # TODO: make match values absolute; for now will use negatives for troubleshooting
+                            d_match_detail["Match Price"].append(abs(match_price)) # don't print negatives
+                            d_match_detail["Match Value"].append(abs(match_value)) # don't print negatives
                             d_match_detail["Match Balance Type"].append(
-                                SupplierBalanceType(match_value)
+                                SupplierBalanceType(match_value) # not an error; recall we flipped the sign for match_price, so the supplier logic works
                             )
                             if (
                                 FC_truck > 0
-                            ):  # NOTE: Providing and purchasing transport are relative to the user
-                                # TODO: make transport values absolute; for now negatives will help with troubleshooting
+                            ):
                                 d_match_detail["Providing Trucking Volume"].append(
                                     FC_truck
                                 )
@@ -2057,50 +2067,50 @@ def jsonize_outputs(
                                     na_string
                                 )
                             if FP_truck > 0:
-                                d_match_detail["Purchasing Trucking Volume"].append(
+                                d_match_detail["Obtaining Trucking Volume"].append(
                                     FP_truck
                                 )
-                                d_match_detail["Purchasing Trucking Price"].append(
-                                    model.p_TransportPrice[p, c, t].value
-                                )
-                                d_match_detail["Purchasing Trucking Value"].append(
-                                    FP_truck * model.p_TransportPrice[p, c, t].value
-                                )
+                                #d_match_detail["Purchasing Trucking Price"].append(
+                                #    model.p_TransportPrice[p, c, t].value
+                                #)
+                                #d_match_detail["Purchasing Trucking Value"].append(
+                                #    FP_truck * model.p_TransportPrice[p, c, t].value
+                                #)
                             else:
-                                d_match_detail["Purchasing Trucking Volume"].append(
+                                d_match_detail["Obtaining Trucking Volume"].append(
                                     na_string
                                 )
-                                d_match_detail["Purchasing Trucking Price"].append(
-                                    na_string
-                                )
-                                d_match_detail["Purchasing Trucking Value"].append(
-                                    na_string
-                                )
+                                #d_match_detail["Purchasing Trucking Price"].append(
+                                #    na_string
+                                #)
+                                #d_match_detail["Purchasing Trucking Value"].append(
+                                #    na_string
+                                #)
                             if FP_pipel > 0:
-                                d_match_detail["Purchasing Piping Volume"].append(
+                                d_match_detail["Obtaining Piping Volume"].append(
                                     FP_pipel
                                 )
-                                d_match_detail["Purchasing Piping Price"].append(
-                                    model.p_TransportPrice[p, c, t].value
-                                )
-                                d_match_detail["Purchasing Piping Value"].append(
-                                    FP_pipel * model.p_TransportPrice[p, c, t].value
-                                )
+                                #d_match_detail["Purchasing Piping Price"].append(
+                                #    model.p_TransportPrice[p, c, t].value
+                                #)
+                                #d_match_detail["Purchasing Piping Value"].append(
+                                #    FP_pipel * model.p_TransportPrice[p, c, t].value
+                                #)
                             else:
-                                d_match_detail["Purchasing Piping Volume"].append(
+                                d_match_detail["Obtaining Piping Volume"].append(
                                     na_string
                                 )
-                                d_match_detail["Purchasing Piping Price"].append(
-                                    na_string
-                                )
-                                d_match_detail["Purchasing Piping Value"].append(
-                                    na_string
-                                )
-                            d_match_detail["Net Value"].append(match_net_value)
+                                #d_match_detail["Purchasing Piping Price"].append(
+                                #    na_string
+                                #)
+                                #d_match_detail["Purchasing Piping Value"].append(
+                                #    na_string
+                                #)
+                            d_match_detail["Net Value"].append(abs(match_net_value)) # don't print negatives
                             d_match_detail["Net Balance Type"].append(
                                 NetBalanceType(match_net_value)
                             )
-                            d_match_detail["Quality"].append(temp_qual_val)
+                            d_match_detail["Quality"].append(model.match_qual_dict[model.p_ProducerWellIDMap[p],ci,"demand side"])
                         # end if not [all empty] here
                     # Add integrator terms
                     d_demand_match["Match Total Volume (bbl)"].append(sum(d_match_detail["Match Volume"]))
@@ -2244,8 +2254,6 @@ def PostSolve(model):
             return None # return None if not index defined
         else:
             # NOTE: (-1) multiplier here for dual
-            price = (-1) * model.dual[dual_key_D] - (-1) * model.dual[dual_key_S]
-            print(f"sup: {-1*model.dual[dual_key_S]}, dem: {-1*model.dual[dual_key_D]}, price: {price}")
             return (-1) * model.dual[dual_key_D] - (-1) * model.dual[dual_key_S]
 
     model.p_TransportPrice = Param(
@@ -2313,9 +2321,6 @@ def PostSolve(model):
         except KeyError:
             return 0
         else:
-            if v_FP_truck_key.value > 0:
-                prof = (model.p_TransportPrice[p, c, t].value - model.p_ProducerTransportBidTruck[pi].value)*v_FP_truck_key.value
-                print(f"({model.p_ProducerWellMap[p]},{model.p_ConsumerWellMap[c]},{t}): {model.p_TransportPrice[p, c, t].value} - {model.p_ProducerTransportBidTruck[pi].value})*{v_FP_truck_key.value} = {prof}")
             return (
                 model.p_TransportPrice[p, c, t] - model.p_ProducerTransportBidTruck[pi]
             ) * v_FP_truck_key
@@ -2339,15 +2344,6 @@ def PostSolve(model):
         except KeyError:
             return 0
         else:
-            """
-            if t in model.s_T_pi[pi]:
-                return (
-                    model.p_TransportPrice[p, c, t].value
-                    - model.p_ProducerTransportBidPipel[pi].value
-                ) * model.v_FP_pipel[pi, p, c, t].value
-            else:
-                return 0
-            """
             return (
                 model.p_TransportPrice[p, c, t].value - model.p_ProducerTransportBidPipel[pi].value
             ) * v_FP_pipel_key
@@ -2392,9 +2388,6 @@ def PostSolve(model):
         except KeyError:
             return 0
         else:
-            if v_FC_truck_key.value > 0:
-                prof = (model.p_TransportPrice[p, c, t].value - model.p_ConsumerTransportBidTruck[ci].value)*v_FC_truck_key.value
-                print(f"({model.p_ProducerWellMap[p]},{model.p_ConsumerWellMap[c]},{t}): {model.p_TransportPrice[p, c, t].value} - {model.p_ConsumerTransportBidTruck[ci].value})*{v_FC_truck_key.value} = {prof}")
             return (
                 model.p_TransportPrice[p, c, t] - model.p_ConsumerTransportBidTruck[ci]
             ) * v_FC_truck_key
@@ -2453,67 +2446,8 @@ def PostSolve(model):
         doc="Consumer total combined transport profit [currency]",
     )
 
-
-    # test section:
-    params_dict = {}
-    #for param_name, param_obj in model.component_map(Param, active=True).items():
-    #    params_dict[param_name] = param_obj.extract_values()
-    #params_dict = {str(key): value for key, value in params_dict.items()}
-
-    #params_dict["Producer volume profit"] = model.p_ProducerVolumeProfit.extract_values()
-    #params_dict["Consumer volume profit"] = model.p_ConsumerVolumeProfit.extract_values()
-    #params_dict["Producer trucking profit"] = model.p_ProducerTruckProfit.extract_values()
-    #params_dict["Producer piping profit"] = model.p_ProducerPipelProfit.extract_values()
-    #params_dict["Consumer trucking profit"] = model.p_ConsumerTruckProfit.extract_values()
-    #params_dict["Consumer piping profit"] = model.p_ConsumerPipelProfit.extract_values()
-    #params_dict = {str(key): value for key, value in params_dict.items()}
-    #with open('parameters.json', 'w') as f:
-    #    json.dump(params_dict, f)
-    """
-    print("Producer Prices")
-    for key, val in model.p_ProducerNodalPrice.items():
-        if val.value != 0 and val.value is not None:
-            print(f"{model.p_ProducerNodalPrice.name}[{key}] = {val.value}")
-    print("Consumer Prices")
-    for key, val in model.p_ConsumerNodalPrice.items():
-        if val.value != 0 and val.value is not None:
-            print(f"{model.p_ConsumerNodalPrice.name}[{key}] = {val.value}")
-    #print("Transport Prices")
-    #for key, val in model.p_TransportPrice.items():
-    #    if val.value != 0 and val.value is not None:
-    #        print(f"{model.p_TransportPrice.name}[{key}] = {val.value}")
-
-    print("Producer volume profit")
-    #model.p_ProducerVolumeProfit.display()
-    for key, value in model.p_ProducerVolumeProfit.items():
-        if value.value != 0:
-            print(f"{model.p_ProducerVolumeProfit.name}[{key}] = {value.value}")
-    print("Consumer volume profit")
-    #model.p_ConsumerVolumeProfit.display()
-    for key, value in model.p_ConsumerVolumeProfit.items():
-        if value.value != 0:
-            print(f"{model.p_ConsumerVolumeProfit.name}[{key}] = {value.value}")
-    print("Producer trucking profit")
-    #model.p_ProducerTruckProfit.display()
-    for key, value in model.p_ProducerTruckProfit.items():
-        if value.value != 0:
-            print(f"{model.p_ProducerTruckProfit.name}[{key}] = {value.value}")
-    print("Producer piping profit")
-    #model.p_ProducerPipelProfit.display()
-    for key, value in model.p_ProducerPipelProfit.items():
-        if value.value != 0:
-            print(f"{model.p_ProducerPipelProfit.name}[{key}] = {value.value}")
-    print("Consumer trucking profit")
-    #model.p_ConsumerTruckProfit.display()
-    for key, value in model.p_ConsumerTruckProfit.items():
-        if value.value != 0:
-            print(f"{model.p_ConsumerTruckProfit.name}[{key}] = {value.value}")
-    print("Consuer piping profit")
-    #model.p_ConsumerPipelProfit.display()
-    for key, value in model.p_ConsumerPipelProfit.items():
-        if value.value != 0:
-            print(f"{model.p_ConsumerPipelProfit.name}[{key}] = {value.value}")
-    """
+    # Run dev_check_outputs here if you want to interrogate prices and profits directly in the console
+    #dev_check_outputs(model)
     return model
 
 
@@ -2547,12 +2481,6 @@ def DataViews(model, save_dir):
     for (pi, p, c, t) in model.s_LP_truck:
         fo.write("\n" + ",".join((pi, p, c, t)))
 
-    # Midstream transport arcs
-    fo.write("\n" + PrintSpacer)
-    fo.write("\nMidstream Transportation Arcs")
-    for (mi, p, c, tp, tc) in model.s_LLM:
-        fo.write("\n" + ",".join((mi, p, c, tp, tc)))
-
     # Consumer set
     fo.write("\n" + PrintSpacer)
     fo.write("\nConsumer index mapping set")
@@ -2561,15 +2489,6 @@ def DataViews(model, save_dir):
             fo.write(
                 "\n" + c + "," + t + ": " + ",".join(model.ConsumerNodeTimeMap[c, t])
             )
-
-    """
-    # Consumer inbound nodes set
-    fo.write("\n"+PrintSpacer)
-    fo.write("\nConsumer inbound arcs index set")
-    for c in model.s_CPUnique:
-        for t in model.s_T:
-            fo.write("\n"+c+","+t+": "+ ",".join(model.s_LM_in_ct[c,t]))
-            """
 
     fo.close()
     return None
