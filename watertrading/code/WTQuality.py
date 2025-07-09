@@ -27,7 +27,7 @@ def quality_overlap_check(producer_qualities,consumer_qualities):
     """
     # If any are aligned, return True, else False
     for i in range(len(producer_qualities)):
-        if producer_qualities[i] != "" and consumer_qualities[i] != "":
+        if producer_qualities[i] != 0 and consumer_qualities[i] != 0:
             return True
     # if it gets here, there is no overlap
     return False
@@ -37,7 +37,7 @@ def quality_entry_check(quality_list):
     """
     A preliminary check to determine whether quality evluation is required
     Inputs:
-    - quality_list: a list of quality specifications, possible containing some or all "" entries
+    - quality_list: a list of quality specifications, possible containing some or all "0" entries
     Outputs:
     - A boolean; True if any quality specified, False if not
     Quality metric values are keyed to:
@@ -61,7 +61,7 @@ def quality_entry_check(quality_list):
         "Hydrogen Sulfide Constraint"
         "NORM Constraint"
     """
-    if all(i == "" for i in quality_list):
+    if all(i == 0 for i in quality_list):
         # No quality disclosures were made
         return False
     else:
@@ -125,7 +125,7 @@ def match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict):
         df_consumer.loc[ci, "Hydrogen Sulfide"],
         df_consumer.loc[ci, "NORM"]
     ]
-    # Cast numerical entries to floats
+    # Cast numerical entries to floats, unless using the "" value for no entry
     producer_qualities = [float(producer_qualities[i]) if producer_qualities[i] != "" else "" for i in range(len(producer_qualities))]
     consumer_qualities = [float(consumer_qualities[i]) if consumer_qualities[i] != "" else "" for i in range(len(consumer_qualities))]
     producer_quality_constraints = [
