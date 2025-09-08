@@ -31,24 +31,24 @@ from pyomo.environ import (
     Any,
     units as pyunits,
     value,
-    BuildAction,
+    #DELETE:#BuildAction,
     Suffix,
 )
 from pyomo.common.config import ConfigBlock, ConfigValue, Bool
 from GetDistance import get_driving_distance, get_pipeline_distance, estimate_driving_distance
 from Utilities import (
     df_to_dict_helper,
-    add_dataframe_distance,
-    add_dataframe_prices,
+    #DELETE:#add_dataframe_distance,
+    #DELETE:#add_dataframe_prices,
     GetUniqueDFData,
-    GenerateCombinationDataFrame,
-    SupplierBidType,
-    ConsumerBidType,
-    SupplierBalanceType,
-    ConsumerBalanceType,
-    NetBalanceType,
+    #DELETE:#GenerateCombinationDataFrame,
+    #DELETE:#SupplierBidType,
+    #DELETE:#ConsumerBidType,
+    #DELETE:#SupplierBalanceType,
+    #DELETE:#ConsumerBalanceType,
+    #DELETE:#NetBalanceType,
     DFRateSum,
-    dev_check_outputs,
+    #DELETE:#dev_check_outputs,
 )
 import WTQuality
 
@@ -159,21 +159,22 @@ def get_data(
         + df_consumer["Latitude"].astype(str)
     )
 
-    # Process raw bids to get model bid conventions
-    df_producer["Supplier Bid (model)"] = (
-        df_producer["Bid Type"].apply(SupplierBidType)
-        * df_producer["Supplier Bid (USD/bbl)"]
-    )
-    df_consumer["Consumer Bid (model)"] = (
-        df_consumer["Bid Type"].apply(ConsumerBidType)
-        * df_consumer["Consumer Bid (USD/bbl)"]
-    )
+    #DELETE:#
+    #DELETE:## Process raw bids to get model bid conventions
+    #DELETE:#df_producer["Supplier Bid (model)"] = (
+    #DELETE:#    df_producer["Bid Type"].apply(SupplierBidType)
+    #DELETE:#    * df_producer["Supplier Bid (USD/bbl)"]
+    #DELETE:#)
+    #DELETE:#df_consumer["Consumer Bid (model)"] = (
+    #DELETE:#    df_consumer["Bid Type"].apply(ConsumerBidType)
+    #DELETE:#    * df_consumer["Consumer Bid (USD/bbl)"]
+    #DELETE:#)
 
     # Initialize dataframes ()
     df_road_distance = pd.DataFrame()
     df_road_time = pd.DataFrame()
 
-    # If update_distance_matrix then get_driving_distance() else load existing distance JSON
+    # If update_distance_matrix then get_driving_distance() and get_pipeline_distance() else load existing distance JSON
     if update_distance_matrix:  # generate new distance matrix using API
         try: # try to retrieve accurate road distances from various API
             df_road_time, df_road_distance = get_driving_distance(distance, df_producer, df_consumer)
@@ -209,10 +210,10 @@ def create_model(
 
     # import config dictionary
     model.config = CONFIG(default)
-    model.type = "water_clearing"
+    model.type = "water_sharing_analogue"
 
-    # enable use of duals
-    model.dual = Suffix(direction=Suffix.IMPORT)
+    #DELETE:## enable use of duals
+    #DELETE:#model.dual = Suffix(direction=Suffix.IMPORT)
 
     # add data frames to model
     model.df_producer = df_producer
@@ -226,8 +227,6 @@ def create_model(
     model.model_units = {
         "volume": pyunits.oil_bbl,
         "distance": pyunits.mile,
-        # "diameter": pyunits.inch,
-        # "concentration": pyunits.kg / pyunits.liter,
         "time": pyunits.day,
         "volume_time": pyunits.oil_bbl / pyunits.day,
         "currency": pyunits.USD,
@@ -363,16 +362,16 @@ def create_model(
         doc="Producer water supply forecast [volume/time]",
     )
 
-    Producer_Supply_Bid = dict(
-        zip(model.df_producer.index, model.df_producer["Supplier Bid (model)"])
-    )
-    model.p_ProducerSupplyBid = Param(
-        model.s_PI,
-        within=Any,  # to suppress Pyomo warning
-        initialize=Producer_Supply_Bid,
-        units=model.model_units["currency_volume"],
-        doc="Producer water supply bid [currency_volume]",
-    )
+    #DELETE:#Producer_Supply_Bid = dict(
+    #DELETE:#    zip(model.df_producer.index, model.df_producer["Supplier Bid (model)"])
+    #DELETE:#)
+    #DELETE:#model.p_ProducerSupplyBid = Param(
+    #DELETE:#    model.s_PI,
+    #DELETE:#    within=Any,  # to suppress Pyomo warning
+    #DELETE:#   initialize=Producer_Supply_Bid,
+    #DELETE:#    units=model.model_units["currency_volume"],
+    #DELETE:#    doc="Producer water supply bid [currency_volume]",
+    #DELETE:#)
 
     # Boolean values for 3rd party transport providers
     Producer_Trucks_Accepted = dict(
@@ -416,16 +415,16 @@ def create_model(
         doc="Producer water trucking capacity [volume_time]",
     )
 
-    ProducerTransportBidTruck = dict(
-        zip(model.df_producer.index, model.df_producer["Truck Transport Bid (USD/bbl)"])
-    )
-    model.p_ProducerTransportBidTruck = Param(
-        model.s_PI,
-        within=Any,  # to suppress Pyomo warning
-        initialize=ProducerTransportBidTruck,
-        units=model.model_units["currency_volume"],
-        doc="Producer water trucking bid [currency_volume]",
-    )
+    #DELETE:#ProducerTransportBidTruck = dict(
+    #DELETE:#    zip(model.df_producer.index, model.df_producer["Truck Transport Bid (USD/bbl)"])
+    #DELETE:#)
+    #DELETE:#model.p_ProducerTransportBidTruck = Param(
+    #DELETE:#    model.s_PI,
+    #DELETE:#    within=Any,  # to suppress Pyomo warning
+    #DELETE:#    initialize=ProducerTransportBidTruck,
+    #DELETE:#    units=model.model_units["currency_volume"],
+    #DELETE:#    doc="Producer water trucking bid [currency_volume]",
+    #DELETE:#)
 
     ProducerMaxRangePipel = dict(
         zip(model.df_producer.index, model.df_producer["Pipe Max Dist (mi)"])
@@ -449,16 +448,16 @@ def create_model(
         doc="Producer water pipeline capacity [volume_time]",
     )
 
-    ProducerTransportBidPipel = dict(
-        zip(model.df_producer.index, model.df_producer["Pipe Transport Bid (USD/bbl)"])
-    )
-    model.p_ProducerTransportBidPipel = Param(
-        model.s_PI,
-        within=Any,  # to suppress Pyomo warning
-        initialize=ProducerTransportBidPipel,
-        units=model.model_units["currency_volume"],
-        doc="Producer water pipeline bid [currency_volume]",
-    )
+    #DELETE:#ProducerTransportBidPipel = dict(
+    #DELETE:#    zip(model.df_producer.index, model.df_producer["Pipe Transport Bid (USD/bbl)"])
+    #DELETE:#)
+    #DELETE:#model.p_ProducerTransportBidPipel = Param(
+    #DELETE:#    model.s_PI,
+    #DELETE:#    within=Any,  # to suppress Pyomo warning
+    #DELETE:#    initialize=ProducerTransportBidPipel,
+    #DELETE:#    units=model.model_units["currency_volume"],
+    #DELETE:#    doc="Producer water pipeline bid [currency_volume]",
+    #DELETE:#)
 
     # Consumer parameters
     Consumer_Wellpad = dict(zip(model.df_consumer.index, model.df_consumer.Wellpad))
@@ -546,16 +545,16 @@ def create_model(
         doc="Consumer water demand forecast [volume/time]",
     )
 
-    Consumer_Demand_Bid = dict(
-        zip(model.df_consumer.index, model.df_consumer["Consumer Bid (model)"])
-    )
-    model.p_ConsumerDemandBid = Param(
-        model.s_CI,
-        within=Any,  # to suppress Pyomo warning
-        initialize=Consumer_Demand_Bid,
-        units=model.model_units["currency_volume"],
-        doc="Consumer water demand bid [currency_volume]",
-    )
+    #DELETE:#Consumer_Demand_Bid = dict(
+    #DELETE:#    zip(model.df_consumer.index, model.df_consumer["Consumer Bid (model)"])
+    #DELETE:#)
+    #DELETE:#model.p_ConsumerDemandBid = Param(
+    #DELETE:#    model.s_CI,
+    #DELETE:#    within=Any,  # to suppress Pyomo warning
+    #DELETE:#    initialize=Consumer_Demand_Bid,
+    #DELETE:#    units=model.model_units["currency_volume"],
+    #DELETE:#    doc="Consumer water demand bid [currency_volume]",
+    #DELETE:#)
 
     # Boolean values for 3rd party transport providers
     Consumer_Trucks_Accepted = dict(
@@ -599,16 +598,16 @@ def create_model(
         doc="Consumer water trucking capacity [volume_time]",
     )
 
-    ConsumerTransportBidTruck = dict(
-        zip(model.df_consumer.index, model.df_consumer["Truck Transport Bid (USD/bbl)"])
-    )
-    model.p_ConsumerTransportBidTruck = Param(
-        model.s_CI,
-        within=Any,  # to suppress Pyomo warning
-        initialize=ConsumerTransportBidTruck,
-        units=model.model_units["currency_volume"],
-        doc="Consumer water trucking bid [currency_volume]",
-    )
+    #DELETE:#ConsumerTransportBidTruck = dict(
+    #DELETE:#    zip(model.df_consumer.index, model.df_consumer["Truck Transport Bid (USD/bbl)"])
+    #DELETE:#)
+    #DELETE:#model.p_ConsumerTransportBidTruck = Param(
+    #DELETE:#    model.s_CI,
+    #DELETE:#    within=Any,  # to suppress Pyomo warning
+    #DELETE:#    initialize=ConsumerTransportBidTruck,
+    #DELETE:#    units=model.model_units["currency_volume"],
+    #DELETE:#    doc="Consumer water trucking bid [currency_volume]",
+    #DELETE:#)
 
     ConsumerMaxRangePipel = dict(
         zip(model.df_consumer.index, model.df_consumer["Pipe Max Dist (mi)"])
@@ -632,16 +631,16 @@ def create_model(
         doc="Consumer water pipeline capacity [volume_time]",
     )
 
-    ConsumerTransportBidPipel = dict(
-        zip(model.df_consumer.index, model.df_consumer["Pipe Transport Bid (USD/bbl)"])
-    )
-    model.p_ConsumerTransportBidPipel = Param(
-        model.s_CI,
-        within=Any,  # to suppress Pyomo warning
-        initialize=ConsumerTransportBidPipel,
-        units=model.model_units["currency_volume"],
-        doc="Consumer water pipeline bid [currency_volume]",
-    )
+    #DELETE:#ConsumerTransportBidPipel = dict(
+    #DELETE:#    zip(model.df_consumer.index, model.df_consumer["Pipe Transport Bid (USD/bbl)"])
+    #DELETE:#)
+    #DELETE:#model.p_ConsumerTransportBidPipel = Param(
+    #DELETE:#    model.s_CI,
+    #DELETE:#    within=Any,  # to suppress Pyomo warning
+    #DELETE:#    initialize=ConsumerTransportBidPipel,
+    #DELETE:#    units=model.model_units["currency_volume"],
+    #DELETE:#    doc="Consumer water pipeline bid [currency_volume]",
+    #DELETE:#)
 
     # Dictionaries mapping unique wellpad entries to corresponding Lat/Lon coordinates
     model.p_ProducerWellpadLon = GetUniqueDFData(
@@ -796,7 +795,7 @@ def create_model(
             quality_check = WTQuality.match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict)
             if (
                 model.p_ProducerPadUnique[pi]
-                != model.p_ConsumerPadUnique[ci]  # possible edge case
+                != model.p_ConsumerPadUnique[ci] # possible edge case
                 and model.p_PipeDistance[
                     Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
@@ -842,7 +841,7 @@ def create_model(
             quality_check = WTQuality.match_quality_check(pi,ci,df_producer,df_consumer,match_qual_dict)
             if (
                 model.p_ProducerPadUnique[pi]
-                != model.p_ConsumerPadUnique[ci]  # possible edge case
+                != model.p_ConsumerPadUnique[ci] # possible edge case
                 and model.p_PipeDistance[
                     Producer_WellpadUnique[pi], Consumer_WellpadUnique[ci]
                 ].value
@@ -1391,37 +1390,27 @@ def create_model(
     # -------------------- Define objectives ----------------------
 
     # Objective
-    ClearingObjExpr = (
+    SharingObjExpr = (
         sum(
-            model.p_ConsumerDemandBid[ci] * model.v_Demand[ci, t]
-            for ci in model.s_CI
-            for t in model.s_T_ci[ci]
-        )
-        - sum(
-            model.p_ProducerSupplyBid[pi] * model.v_Supply[pi, t]
-            for pi in model.s_PI
-            for t in model.s_T_pi[pi]
-        )
-        - sum(
-            model.p_ProducerTransportBidTruck[pi] * model.v_FP_truck[pi, p, c, t]
+            ((1+model.p_ProducerTransportCapacityTruck[pi])/(1+model.p_RoadDistance[p,c])) * model.v_FP_truck[pi, p, c, t]
             for (pi, p, c, t) in model.s_LP_truck
         )
-        - sum(
-            model.p_ProducerTransportBidPipel[pi] * model.v_FP_pipel[pi, p, c, t]
+        + sum(
+            ((1+model.p_ProducerTransportCapacityPipel[pi])/(1+model.p_PipeDistance[p,c])) * model.v_FP_pipel[pi, p, c, t]
             for (pi, p, c, t) in model.s_LP_pipel
         )
-        - sum(
-            model.p_ConsumerTransportBidTruck[ci] * model.v_FC_truck[ci, p, c, t]
+        + sum(
+            ((1+model.p_ConsumerTransportCapacityTruck[ci])/(1+model.p_RoadDistance[p,c])) * model.v_FC_truck[ci, p, c, t]
             for (ci, p, c, t) in model.s_LC_truck
         )
-        - sum(
-            model.p_ConsumerTransportBidPipel[ci] * model.v_FC_pipel[ci, p, c, t]
+        + sum(
+            ((1+model.p_ConsumerTransportCapacityPipel[ci])/(1+model.p_PipeDistance[p,c])) * model.v_FC_pipel[ci, p, c, t]
             for (ci, p, c, t) in model.s_LC_pipel
         )
     )
 
     model.objective = Objective(
-        expr=ClearingObjExpr, sense=maximize, doc="Objective function"
+        expr=SharingObjExpr, sense=maximize, doc="Objective function"
     )
 
     print("Model setup complete")
@@ -1514,7 +1503,7 @@ def jsonize_outputs(
     if df_v_Supply.empty and df_v_Demand.empty:
         print("***************************************")
         print("***************************************")
-        print("*** No transactions; market is dry! ***")
+        print("*** No matches satisfy the requests ***")
         print("***************************************")
         print("***************************************")
         return None
@@ -1531,20 +1520,20 @@ def jsonize_outputs(
         "Start Date": [],
         "End Date": [],
         "Supply Rate (bpd)": [],
-        "Supplier Bid (USD/bbl)": [],
-        "Bid Type": [],
         "Trucks Accepted": [],
         "Pipes Accepted": [],
         "Truck Max Dist (mi)": [],
         "Trucking Capacity (bpd)": [],
-        "Truck Transport Bid (USD/bbl)": [],
         "Pipe Max Dist (mi)": [],
         "Pipeline Capacity (bpd)": [],
-        "Pipe Transport Bid (USD/bbl)": [],
         "Matches": [],
         "Match Total Volume (bbl)":[],
-        "Match Total Value (USD)":[],
     }
+    #DELETE:#"Supplier Bid (USD/bbl)": [],
+    #DELETE:#"Bid Type": [],
+    #DELETE:#"Truck Transport Bid (USD/bbl)": [],
+    #DELETE:#"Pipe Transport Bid (USD/bbl)": [],
+    #DELETE:#"Match Total Value (USD)":[],
 
     d_demand_match = {
         "Index": [],
@@ -1557,20 +1546,20 @@ def jsonize_outputs(
         "Start Date": [],
         "End Date": [],
         "Demand Rate (bpd)": [],
-        "Consumer Bid (USD/bbl)": [],
-        "Bid Type": [],
         "Trucks Accepted": [],
         "Pipes Accepted": [],
         "Truck Max Dist (mi)": [],
         "Trucking Capacity (bpd)": [],
-        "Truck Transport Bid (USD/bbl)": [],
         "Pipe Max Dist (mi)": [],
         "Pipeline Capacity (bpd)": [],
-        "Pipe Transport Bid (USD/bbl)": [],
         "Matches": [],
         "Match Total Volume (bbl)":[],
-        "Match Total Value (USD)":[],
     }
+    #DELETE:#"Consumer Bid (USD/bbl)": [],
+    #DELETE:#"Bid Type": [],
+    #DELETE:#"Truck Transport Bid (USD/bbl)": [],
+    #DELETE:#"Pipe Transport Bid (USD/bbl)": [],
+    #DELETE:#"Match Total Value (USD)":[],
 
     # iterate over supplier requests
     for pi in model.s_PI:
@@ -1648,12 +1637,12 @@ def jsonize_outputs(
                     d_supply_match["Supply Rate (bpd)"].append(
                         model.df_producer.loc[pi, "Supply Rate (bpd)"]
                     )
-                    d_supply_match["Supplier Bid (USD/bbl)"].append(
-                        model.df_producer.loc[pi, "Supplier Bid (USD/bbl)"]
-                    )
-                    d_supply_match["Bid Type"].append(
-                        model.df_producer.loc[pi, "Bid Type"]
-                    )
+                    #DELETE:#d_supply_match["Supplier Bid (USD/bbl)"].append(
+                    #DELETE:#    model.df_producer.loc[pi, "Supplier Bid (USD/bbl)"]
+                    #DELETE:#)
+                    #DELETE:#d_supply_match["Bid Type"].append(
+                    #DELETE:#    model.df_producer.loc[pi, "Bid Type"]
+                    #DELETE:#)
                     d_supply_match["Trucks Accepted"].append(
                         model.df_producer.loc[pi, "Trucks Accepted"]
                     )
@@ -1666,41 +1655,41 @@ def jsonize_outputs(
                     d_supply_match["Trucking Capacity (bpd)"].append(
                         model.df_producer.loc[pi, "Trucking Capacity (bpd)"]
                     )
-                    d_supply_match["Truck Transport Bid (USD/bbl)"].append(
-                        model.df_producer.loc[pi, "Truck Transport Bid (USD/bbl)"]
-                    )
+                    #DELETE:#d_supply_match["Truck Transport Bid (USD/bbl)"].append(
+                    #DELETE:#    model.df_producer.loc[pi, "Truck Transport Bid (USD/bbl)"]
+                    #DELETE:#)
                     d_supply_match["Pipe Max Dist (mi)"].append(
                         model.df_producer.loc[pi, "Pipe Max Dist (mi)"]
                     )
                     d_supply_match["Pipeline Capacity (bpd)"].append(
                         model.df_producer.loc[pi, "Pipeline Capacity (bpd)"]
                     )
-                    d_supply_match["Pipe Transport Bid (USD/bbl)"].append(
-                        model.df_producer.loc[pi, "Pipe Transport Bid (USD/bbl)"]
-                    )
+                    #DELETE:#d_supply_match["Pipe Transport Bid (USD/bbl)"].append(
+                    #DELETE:#    model.df_producer.loc[pi, "Pipe Transport Bid (USD/bbl)"]
+                    #DELETE:#)
                     # create sub-level match detail dictionary
                     d_match_detail = {
                         "Match Index": [],
                         "Match Date Index": [],
                         "Match Date": [],
                         "Match Volume": [],
-                        "Match Price": [],
-                        "Match Value": [],
-                        "Match Balance Type": [],
+                        #DELETE:#"Match Price": [],
+                        #DELETE:#"Match Value": [],
+                        #DELETE:#"Match Balance Type": [],
                         "Providing Trucking Volume": [],
-                        "Providing Trucking Price": [],
-                        "Providing Trucking Value": [],
+                        #DELETE:#"Providing Trucking Price": [],
+                        #DELETE:#"Providing Trucking Value": [],
                         "Providing Piping Volume": [],
-                        "Providing Piping Price": [],
-                        "Providing Piping Value": [],
+                        #DELETE:#"Providing Piping Price": [],
+                        #DELETE:#"Providing Piping Value": [],
                         "Obtaining Trucking Volume": [], # edge case; not necessarily a "purchase"
-                        #"Purchasing Trucking Price": [],
-                        #"Purchasing Trucking Value": [],
+                        #DELETE:#"Purchasing Trucking Price": [],
+                        #DELETE:#"Purchasing Trucking Value": [],
                         "Obtaining Piping Volume": [],
-                        #"Purchasing Piping Price": [],
-                        #"Purchasing Piping Value": [],
-                        "Net Value": [],
-                        "Net Balance Type": [],
+                        #DELETE:#"Purchasing Piping Price": [],
+                        #DELETE:#"Purchasing Piping Value": [],
+                        #DELETE:#"Net Value": [],
+                        #DELETE:#"Net Balance Type": [],
                         "Quality": [],
                     }
                     # Iterate through the possible time points and find matches
@@ -1752,110 +1741,110 @@ def jsonize_outputs(
                             FC_truck = DFRateSum(df_FC_truck_filter_t)
                             FC_pipel = DFRateSum(df_FC_pipel_filter_t)
                             match_volume = FP_truck + FP_pipel + FC_truck + FC_pipel
-                            match_price = value(model.p_ProducerNodalPrice[p, t])
-                            match_value = match_volume * match_price # nodal price times volume
-                            match_net_value = match_volume * match_price + (FP_truck + FP_pipel) * abs(model.p_TransportPrice[p, c, t].value) # match price*volume + value of provided transport
+                            #DELETE:#match_price = value(model.p_ProducerNodalPrice[p, t])
+                            #DELETE:#match_value = match_volume * match_price # nodal price times volume
+                            #DELETE:#match_net_value = match_volume * match_price + (FP_truck + FP_pipel) * abs(model.p_TransportPrice[p, c, t].value) # match price*volume + value of provided transport
                             # record entries
                             d_match_detail["Match Index"].append(pi + "-" + c + "-" + t)
                             d_match_detail["Match Date Index"].append(t)
                             d_match_detail["Match Date"].append(model.d_T[t])
                             d_match_detail["Match Volume"].append(match_volume)
-                            d_match_detail["Match Price"].append(abs(match_price)) # don't print negatives
-                            d_match_detail["Match Value"].append(abs(match_value)) # don't print negatives
-                            d_match_detail["Match Balance Type"].append(
-                                SupplierBalanceType(match_value)
-                            )
+                            #DELETE:#d_match_detail["Match Price"].append(abs(match_price)) # don't print negatives
+                            #DELETE:#d_match_detail["Match Value"].append(abs(match_value)) # don't print negatives
+                            #DELETE:#d_match_detail["Match Balance Type"].append(
+                            #DELETE:#    SupplierBalanceType(match_value)
+                            #DELETE:#)
                             if (
                                 FP_truck > 0
                             ):
                                 d_match_detail["Providing Trucking Volume"].append(
                                     FP_truck
                                 )
-                                d_match_detail["Providing Trucking Price"].append(
-                                    abs(model.p_TransportPrice[p, c, t].value)
-                                )
-                                d_match_detail["Providing Trucking Value"].append(
-                                    FP_truck * abs(model.p_TransportPrice[p, c, t].value)
-                                )
+                                #DELETE:#d_match_detail["Providing Trucking Price"].append(
+                                #DELETE:#    abs(model.p_TransportPrice[p, c, t].value)
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Providing Trucking Value"].append(
+                                #DELETE:#    FP_truck * abs(model.p_TransportPrice[p, c, t].value)
+                                #DELETE:#)
                             else:
                                 d_match_detail["Providing Trucking Volume"].append(
                                     na_string
                                 )
-                                d_match_detail["Providing Trucking Price"].append(
-                                    na_string
-                                )
-                                d_match_detail["Providing Trucking Value"].append(
-                                    na_string
-                                )
+                                #DELETE:#d_match_detail["Providing Trucking Price"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Providing Trucking Value"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
                             if FP_pipel > 0:
                                 d_match_detail["Providing Piping Volume"].append(
                                     FP_pipel
                                 )
-                                d_match_detail["Providing Piping Price"].append(
-                                    model.p_TransportPrice[p, c, t].value
-                                )
-                                d_match_detail["Providing Piping Value"].append(
-                                    FP_pipel * model.p_TransportPrice[p, c, t].value
-                                )
+                                #DELETE:#d_match_detail["Providing Piping Price"].append(
+                                #DELETE:#    model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Providing Piping Value"].append(
+                                #DELETE:#    FP_pipel * model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
                             else:
                                 d_match_detail["Providing Piping Volume"].append(
                                     na_string
                                 )
-                                d_match_detail["Providing Piping Price"].append(
-                                    na_string
-                                )
-                                d_match_detail["Providing Piping Value"].append(
-                                    na_string
-                                )
+                                #DELETE:#d_match_detail["Providing Piping Price"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Providing Piping Value"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
                             if FC_truck > 0:
                                 d_match_detail["Obtaining Trucking Volume"].append(
                                     FC_truck
                                 )
-                                #d_match_detail["Purchasing Trucking Price"].append(
-                                #    model.p_TransportPrice[p, c, t].value
-                                #)
-                                #d_match_detail["Purchasing Trucking Value"].append(
-                                #    FC_truck * model.p_TransportPrice[p, c, t].value
-                                #)
+                                #DELETE:#d_match_detail["Purchasing Trucking Price"].append(
+                                #DELETE:#    model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Purchasing Trucking Value"].append(
+                                #DELETE:#    FC_truck * model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
                             else:
                                 d_match_detail["Obtaining Trucking Volume"].append(
                                     na_string
                                 )
-                                #d_match_detail["Purchasing Trucking Price"].append(
-                                #    na_string
-                                #)
-                                #d_match_detail["Purchasing Trucking Value"].append(
-                                #    na_string
-                                #)
+                                #DELETE:#d_match_detail["Purchasing Trucking Price"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Purchasing Trucking Value"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
                             if FC_pipel > 0:
                                 d_match_detail["Obtaining Piping Volume"].append(
                                     FC_pipel
                                 )
-                                #d_match_detail["Purchasing Piping Price"].append(
-                                #    model.p_TransportPrice[p, c, t].value
-                                #)
-                                #d_match_detail["Purchasing Piping Value"].append(
-                                #    FC_pipel * model.p_TransportPrice[p, c, t].value
-                                #)
+                                #DELETE:#d_match_detail["Purchasing Piping Price"].append(
+                                #DELETE:#    model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Purchasing Piping Value"].append(
+                                #DELETE:#    FC_pipel * model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
                             else:
                                 d_match_detail["Obtaining Piping Volume"].append(
                                     na_string
                                 )
-                                #d_match_detail["Purchasing Piping Price"].append(
-                                #    na_string
-                                #)
-                                #d_match_detail["Purchasing Piping Value"].append(
-                                #    na_string
-                                #)
-                            d_match_detail["Net Value"].append(abs(match_net_value)) # don't print negatives
-                            d_match_detail["Net Balance Type"].append(
-                                NetBalanceType(match_net_value)
-                            )
+                                #DELETE:#d_match_detail["Purchasing Piping Price"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Purchasing Piping Value"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
+                            #DELETE:#d_match_detail["Net Value"].append(abs(match_net_value)) # don't print negatives
+                            #DELETE:#d_match_detail["Net Balance Type"].append(
+                            #DELETE:#    NetBalanceType(match_net_value)
+                            #DELETE:#)
                             d_match_detail["Quality"].append(model.match_qual_dict[pi,model.p_ConsumerWellIDMap[c],"supply side"])
                         # end if not [all empty] here
                     # Add integrator terms
                     d_supply_match["Match Total Volume (bbl)"].append(sum(d_match_detail["Match Volume"]))
-                    d_supply_match["Match Total Value (USD)"].append(sum(d_match_detail["Net Value"]))
+                    #DELETE:#d_supply_match["Match Total Value (USD)"].append(sum(d_match_detail["Net Value"]))
                     # Finally, push match details to Supply match dictionary
                     d_supply_match["Matches"].append(d_match_detail)
 
@@ -1931,12 +1920,12 @@ def jsonize_outputs(
                     d_demand_match["Demand Rate (bpd)"].append(
                         model.df_consumer.loc[ci, "Demand Rate (bpd)"]
                     )
-                    d_demand_match["Consumer Bid (USD/bbl)"].append(
-                        model.df_consumer.loc[ci, "Consumer Bid (USD/bbl)"]
-                    )
-                    d_demand_match["Bid Type"].append(
-                        model.df_consumer.loc[ci, "Bid Type"]
-                    )
+                    #DELETE:#d_demand_match["Consumer Bid (USD/bbl)"].append(
+                    #DELETE:#    model.df_consumer.loc[ci, "Consumer Bid (USD/bbl)"]
+                    #DELETE:#)
+                    #DELETE:#d_demand_match["Bid Type"].append(
+                    #DELETE:#    model.df_consumer.loc[ci, "Bid Type"]
+                    #DELETE:#)
                     d_demand_match["Trucks Accepted"].append(
                         model.df_consumer.loc[ci, "Trucks Accepted"]
                     )
@@ -1949,41 +1938,41 @@ def jsonize_outputs(
                     d_demand_match["Trucking Capacity (bpd)"].append(
                         model.df_consumer.loc[ci, "Trucking Capacity (bpd)"]
                     )
-                    d_demand_match["Truck Transport Bid (USD/bbl)"].append(
-                        model.df_consumer.loc[ci, "Truck Transport Bid (USD/bbl)"]
-                    )
+                    #DELETE:#d_demand_match["Truck Transport Bid (USD/bbl)"].append(
+                    #DELETE:#    model.df_consumer.loc[ci, "Truck Transport Bid (USD/bbl)"]
+                    #DELETE:#)
                     d_demand_match["Pipe Max Dist (mi)"].append(
                         model.df_consumer.loc[ci, "Pipe Max Dist (mi)"]
                     )
                     d_demand_match["Pipeline Capacity (bpd)"].append(
                         model.df_consumer.loc[ci, "Pipeline Capacity (bpd)"]
                     )
-                    d_demand_match["Pipe Transport Bid (USD/bbl)"].append(
-                        model.df_consumer.loc[ci, "Pipe Transport Bid (USD/bbl)"]
-                    )
+                    #DELETE:#d_demand_match["Pipe Transport Bid (USD/bbl)"].append(
+                    #DELETE:#    model.df_consumer.loc[ci, "Pipe Transport Bid (USD/bbl)"]
+                    #DELETE:#)
                     # create sub-level match detail dictionary
                     d_match_detail = {
                         "Match Index": [],
                         "Match Date Index": [],
                         "Match Date": [],
                         "Match Volume": [],
-                        "Match Price": [],
-                        "Match Value": [],
-                        "Match Balance Type": [],
+                        #DELETE:#"Match Price": [],
+                        #DELETE:#"Match Value": [],
+                        #DELETE:#"Match Balance Type": [],
                         "Providing Trucking Volume": [],
-                        "Providing Trucking Price": [],
-                        "Providing Trucking Value": [],
+                        #DELETE:#"Providing Trucking Price": [],
+                        #DELETE:#"Providing Trucking Value": [],
                         "Providing Piping Volume": [],
-                        "Providing Piping Price": [],
-                        "Providing Piping Value": [],
+                        #DELETE:#"Providing Piping Price": [],
+                        #DELETE:#"Providing Piping Value": [],
                         "Obtaining Trucking Volume": [],
-                        #"Purchasing Trucking Price": [],
-                        #"Purchasing Trucking Value": [],
+                        #DELETE:#"Purchasing Trucking Price": [],
+                        #DELETE:#"Purchasing Trucking Value": [],
                         "Obtaining Piping Volume": [],
-                        #"Purchasing Piping Price": [],
-                        #"Purchasing Piping Value": [],
-                        "Net Value": [],
-                        "Net Balance Type": [],
+                        #DELETE:#"Purchasing Piping Price": [],
+                        #DELETE:#"Purchasing Piping Value": [],
+                        #DELETE:#"Net Value": [],
+                        #DELETE:#"Net Balance Type": [],
                         "Quality": [],
                     }
                     # Iterate through the possible time points and find matches
@@ -2035,110 +2024,110 @@ def jsonize_outputs(
                             FC_truck = DFRateSum(df_FC_truck_filter_t)
                             FC_pipel = DFRateSum(df_FC_pipel_filter_t)
                             match_volume = FP_truck + FP_pipel + FC_truck + FC_pipel
-                            match_price = -1*value(model.p_ConsumerNodalPrice[c, t]) # to correct the price logic
-                            match_value = match_volume * match_price # nodal price times volume
-                            match_net_value = match_volume * match_price + (FC_truck + FC_pipel) * abs(model.p_TransportPrice[p, c, t].value) # match price*volume + value of provided transport
+                            #DELETE:#match_price = -1*value(model.p_ConsumerNodalPrice[c, t]) # to correct the price logic
+                            #DELETE:#match_value = match_volume * match_price # nodal price times volume
+                            #DELETE:#match_net_value = match_volume * match_price + (FC_truck + FC_pipel) * abs(model.p_TransportPrice[p, c, t].value) # match price*volume + value of provided transport
                             # record entries
                             d_match_detail["Match Index"].append(ci + "-" + p + "-" + t)
                             d_match_detail["Match Date Index"].append(t)
                             d_match_detail["Match Date"].append(model.d_T[t])
                             d_match_detail["Match Volume"].append(match_volume)
-                            d_match_detail["Match Price"].append(abs(match_price)) # don't print negatives
-                            d_match_detail["Match Value"].append(abs(match_value)) # don't print negatives
-                            d_match_detail["Match Balance Type"].append(
-                                SupplierBalanceType(match_value) # not an error; recall we flipped the sign for match_price, so the supplier logic works
-                            )
+                            #DELETE:#d_match_detail["Match Price"].append(abs(match_price)) # don't print negatives
+                            #DELETE:#d_match_detail["Match Value"].append(abs(match_value)) # don't print negatives
+                            #DELETE:#d_match_detail["Match Balance Type"].append(
+                            #DELETE:#    SupplierBalanceType(match_value) # not an error; recall we flipped the sign for match_price, so the supplier logic works
+                            #DELETE:#)
                             if (
                                 FC_truck > 0
                             ):
                                 d_match_detail["Providing Trucking Volume"].append(
                                     FC_truck
                                 )
-                                d_match_detail["Providing Trucking Price"].append(
-                                    model.p_TransportPrice[p, c, t].value
-                                )
-                                d_match_detail["Providing Trucking Value"].append(
-                                    FC_truck * model.p_TransportPrice[p, c, t].value
-                                )
+                                #DELETE:#d_match_detail["Providing Trucking Price"].append(
+                                #DELETE:#    model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Providing Trucking Value"].append(
+                                #DELETE:#    FC_truck * model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
                             else:
                                 d_match_detail["Providing Trucking Volume"].append(
                                     na_string
                                 )
-                                d_match_detail["Providing Trucking Price"].append(
-                                    na_string
-                                )
-                                d_match_detail["Providing Trucking Value"].append(
-                                    na_string
-                                )
+                                #DELETE:#d_match_detail["Providing Trucking Price"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Providing Trucking Value"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
                             if FC_pipel > 0:
                                 d_match_detail["Providing Piping Volume"].append(
                                     FC_pipel
                                 )
-                                d_match_detail["Providing Piping Price"].append(
-                                    model.p_TransportPrice[p, c, t].value
-                                )
-                                d_match_detail["Providing Piping Value"].append(
-                                    FC_pipel * model.p_TransportPrice[p, c, t].value
-                                )
+                                #DELETE:#d_match_detail["Providing Piping Price"].append(
+                                #DELETE:#    model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Providing Piping Value"].append(
+                                #DELETE:#    FC_pipel * model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
                             else:
                                 d_match_detail["Providing Piping Volume"].append(
                                     na_string
                                 )
-                                d_match_detail["Providing Piping Price"].append(
-                                    na_string
-                                )
-                                d_match_detail["Providing Piping Value"].append(
-                                    na_string
-                                )
+                                #DELETE:#d_match_detail["Providing Piping Price"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Providing Piping Value"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
                             if FP_truck > 0:
                                 d_match_detail["Obtaining Trucking Volume"].append(
                                     FP_truck
                                 )
-                                #d_match_detail["Purchasing Trucking Price"].append(
-                                #    model.p_TransportPrice[p, c, t].value
-                                #)
-                                #d_match_detail["Purchasing Trucking Value"].append(
-                                #    FP_truck * model.p_TransportPrice[p, c, t].value
-                                #)
+                                #DELETE:#d_match_detail["Purchasing Trucking Price"].append(
+                                #DELETE:#    model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Purchasing Trucking Value"].append(
+                                #DELETE:#    FP_truck * model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
                             else:
                                 d_match_detail["Obtaining Trucking Volume"].append(
                                     na_string
                                 )
-                                #d_match_detail["Purchasing Trucking Price"].append(
-                                #    na_string
-                                #)
-                                #d_match_detail["Purchasing Trucking Value"].append(
-                                #    na_string
-                                #)
+                                #DELETE:#d_match_detail["Purchasing Trucking Price"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Purchasing Trucking Value"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
                             if FP_pipel > 0:
                                 d_match_detail["Obtaining Piping Volume"].append(
                                     FP_pipel
                                 )
-                                #d_match_detail["Purchasing Piping Price"].append(
-                                #    model.p_TransportPrice[p, c, t].value
-                                #)
-                                #d_match_detail["Purchasing Piping Value"].append(
-                                #    FP_pipel * model.p_TransportPrice[p, c, t].value
-                                #)
+                                #DELETE:#d_match_detail["Purchasing Piping Price"].append(
+                                #DELETE:#    model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Purchasing Piping Value"].append(
+                                #DELETE:#    FP_pipel * model.p_TransportPrice[p, c, t].value
+                                #DELETE:#)
                             else:
                                 d_match_detail["Obtaining Piping Volume"].append(
                                     na_string
                                 )
-                                #d_match_detail["Purchasing Piping Price"].append(
-                                #    na_string
-                                #)
-                                #d_match_detail["Purchasing Piping Value"].append(
-                                #    na_string
-                                #)
-                            d_match_detail["Net Value"].append(abs(match_net_value)) # don't print negatives
-                            d_match_detail["Net Balance Type"].append(
-                                NetBalanceType(match_net_value)
-                            )
+                                #DELETE:#d_match_detail["Purchasing Piping Price"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
+                                #DELETE:#d_match_detail["Purchasing Piping Value"].append(
+                                #DELETE:#    na_string
+                                #DELETE:#)
+                            #DELETE:#d_match_detail["Net Value"].append(abs(match_net_value)) # don't print negatives
+                            #DELETE:#d_match_detail["Net Balance Type"].append(
+                            #DELETE:#    NetBalanceType(match_net_value)
+                            #DELETE:#)
                             d_match_detail["Quality"].append(model.match_qual_dict[model.p_ProducerWellIDMap[p],ci,"demand side"])
                         # end if not [all empty] here
                     # Add integrator terms
                     d_demand_match["Match Total Volume (bbl)"].append(sum(d_match_detail["Match Volume"]))
-                    d_demand_match["Match Total Value (USD)"].append(sum(d_match_detail["Net Value"]))
+                    #DELETE:#d_demand_match["Match Total Value (USD)"].append(sum(d_match_detail["Net Value"]))
                     # Finally, push match details to Demand match dictionary
                     d_demand_match["Matches"].append(d_match_detail)
 
@@ -2163,316 +2152,316 @@ def jsonize_outputs(
     return None
 
 
-# Create secondary dataframe to output profit
-def jsonize_profits(model, profits_dir):
-    # Create dataframes from paramter data
-    df_ProducerVolumeProfit = pd.DataFrame(
-        {
-            "Producer Index": key,
-            "Profit": model.p_ProducerVolumeProfit[key].value,
-            "Operator": model.p_ProducerOperator[key],
-        }
-        for key in model.p_ProducerVolumeProfit
-    )
-    df_ConsumerVolumeProfit = pd.DataFrame(
-        {
-            "Consumer Index": key,
-            "Profit": model.p_ConsumerVolumeProfit[key].value,
-            "Operator": model.p_ConsumerOperator[key],
-        }
-        for key in model.p_ConsumerVolumeProfit
-    )
-    df_ProducerTransportProfit = pd.DataFrame(
-        {
-            "Producer Index": key,
-            "Profit": model.p_ProducerTotalTransportProfit[key].value,
-            "Operator": model.p_ProducerOperator[key],
-        }
-        for key in model.p_ProducerTotalTransportProfit
-    )
-    df_ConsumerTransportProfit = pd.DataFrame(
-        {
-            "Consumer Index": key,
-            "Profit": model.p_ConsumerTotalTransportProfit[key].value,
-            "Operator": model.p_ConsumerOperator[key],
-        }
-        for key in model.p_ConsumerTotalTransportProfit
-    )
-
-    # convert to dictionaries for easy json output
-    d_ProducerVolumeProfit = df_ProducerVolumeProfit.to_dict(orient="records")
-    d_ConsumerVolumeProfit = df_ConsumerVolumeProfit.to_dict(orient="records")
-    d_ProducerTransportProfit = df_ProducerTransportProfit.to_dict(orient="records")
-    d_ConsumerTransportProfit = df_ConsumerTransportProfit.to_dict(orient="records")
-    with open(profits_dir, "w") as data_file:
-        json.dump(
-            {
-                "Supply": d_ProducerVolumeProfit,
-                "Demand": d_ConsumerVolumeProfit,
-                "Transport (Producer)": d_ProducerTransportProfit,
-                "Transport (Consumer)": d_ConsumerTransportProfit,
-            },
-            data_file,
-            indent=2,
-        )
-    return None
-
-
-# Post-solve calculations
-def PostSolve(model):
-    """
-    # NOTE: Dual variables *might* be defined in the negative by a given solver
-    # (i.e., solver returns a negative value where the "correct" interpretation is positive);
-    # may need to multiply by -1 to get meaningful results
-    # GLPK does this; multiply duals by (-1) if using GLPK.
-    # SEARCH for "(-1) multiplier" to find where this is/needs to be done
-    """
-    ### PRICES
-    # Get producer Nodal Prices from clearing constraint dual variables
-    def ProducerNodalPriceINIT(model, p, t):
-        try:
-            # Is the constraint defined at these indices?
-            dual_key = model.ProducerSupplyBalance[p, t]
-        except KeyError:
-            return None # return None if not index defined
-        else:
-            # NOTE: (-1) multiplier here for dual; some solvers output "negative" dual values
-            return (-1) * model.dual[dual_key]
-
-    model.p_ProducerNodalPrice = Param(
-        model.s_PPUnique,
-        model.s_T,
-        within=Any,
-        initialize=ProducerNodalPriceINIT,
-        units=model.model_units["currency_volume"],
-        doc="Producer Nodal Price [currency_volume]",
-    )
-
-    # Get consumer Nodal Prices from clearing constraint dual variables
-    def ConsumerNodalPriceINIT(model, c, t):
-        try:
-            # Is the constraint defined at these indices?
-            dual_key = model.ConsumerDemandBalance[c, t]
-        except KeyError:
-            return None # return None if not index defined
-        else:
-            # NOTE: (-1) multiplier here for dual
-            return (-1) * model.dual[dual_key]
-
-    model.p_ConsumerNodalPrice = Param(
-        model.s_CPUnique,
-        model.s_T,
-        within=Any,
-        initialize=ConsumerNodalPriceINIT,
-        units=model.model_units["currency_volume"],
-        doc="Consumer Nodal Price [currency_volume]",
-    )
-
-    # Get trucking nodal prices from nodal price differences
-    def TransportPriceINIT(model, p, c, t):
-        try:
-            # Is the constraint defined at these indices?
-            dual_key_D = model.ConsumerDemandBalance[c, t]
-            dual_key_S = model.ProducerSupplyBalance[p, t]
-        except KeyError:
-            return None # return None if not index defined
-        else:
-            # NOTE: (-1) multiplier here for dual
-            return (-1) * model.dual[dual_key_D] - (-1) * model.dual[dual_key_S]
-
-    model.p_TransportPrice = Param(
-        model.s_PPUnique,
-        model.s_CPUnique,
-        model.s_T,
-        within=Any,
-        initialize=TransportPriceINIT,
-        units=model.model_units["currency_volume"],
-        doc="Transport Nodal Price [currency_volume]",
-    )
-
-    ### PROFITS
-    # Supplier Volume Profit
-    def ProducerVolumeProfitINIT(model, pi):
-        p = model.p_ProducerPadUnique[pi]
-        try:
-            return sum(
-                (
-                    model.p_ProducerNodalPrice[p, t].value
-                    - model.p_ProducerSupplyBid[pi].value
-                )
-                * model.v_Supply[pi, t].value
-                for t in model.s_T_pi[pi]
-            )
-        except:
-            return 0
-
-    model.p_ProducerVolumeProfit = Param(
-        model.s_PI,
-        within=Any,
-        initialize=ProducerVolumeProfitINIT,
-        units=model.model_units["currency"],
-        doc="Producer volume profit [currency]",
-    )
-
-    # Consumer Profit
-    def ConsumerVolumeProfitINIT(model, ci):
-        c = model.p_ConsumerPadUnique[ci]
-        try:
-            return sum(
-                (
-                    model.p_ConsumerDemandBid[ci].value
-                    - model.p_ConsumerNodalPrice[c, t].value
-                )
-                * model.v_Demand[ci, t].value
-                for t in model.s_T_ci[ci]
-            )
-        except:
-            return 0
-
-    model.p_ConsumerVolumeProfit = Param(
-        model.s_CI,
-        within=Any,
-        initialize=ConsumerVolumeProfitINIT,
-        units=model.model_units["currency"],
-        doc="Consumer profit [currency]",
-    )
-
-    # Producer Trucking Transport per-route Profit
-    def ProducerTruckProfitINIT(model, pi, p, c, t):
-        try:
-            # Is the variable defined here? (If it is, the constraint and price should be, too, so this check should be sufficient.)
-            v_FP_truck_key = model.v_FP_truck[pi, p, c, t]
-        except KeyError:
-            return 0
-        else:
-            return (
-                model.p_TransportPrice[p, c, t] - model.p_ProducerTransportBidTruck[pi]
-            ) * v_FP_truck_key
-
-    model.p_ProducerTruckProfit = Param(
-        model.s_PI,
-        model.s_PPUnique,
-        model.s_CPUnique,
-        model.s_T,
-        within=Any,
-        initialize=ProducerTruckProfitINIT,
-        units=model.model_units["currency"],
-        doc="Producer per-route trucking transport profit [currency]",
-    )
-
-    # Producer Piping Transport per-route Profit
-    def ProducerPipelProfitINIT(model, pi, p, c, t):
-        try:
-            # Is the variable defined here? (If it is, the constraint and price should be, too, so this check should be sufficient.)
-            v_FP_pipel_key = model.v_FP_pipel[pi, p, c, t]
-        except KeyError:
-            return 0
-        else:
-            return (
-                model.p_TransportPrice[p, c, t].value - model.p_ProducerTransportBidPipel[pi].value
-            ) * v_FP_pipel_key
+#DELETE:## Create secondary dataframe to output profit
+#DELETE:#def jsonize_profits(model, profits_dir):
+#DELETE:#    # Create dataframes from parameter data
+#DELETE:#    df_ProducerVolumeProfit = pd.DataFrame(
+#DELETE:#        {
+#DELETE:#            "Producer Index": key,
+#DELETE:#            "Profit": model.p_ProducerVolumeProfit[key].value,
+#DELETE:#            "Operator": model.p_ProducerOperator[key],
+#DELETE:#        }
+#DELETE:#        for key in model.p_ProducerVolumeProfit
+#DELETE:#    )
+#DELETE:#    df_ConsumerVolumeProfit = pd.DataFrame(
+#DELETE:#        {
+#DELETE:#            "Consumer Index": key,
+#DELETE:#            "Profit": model.p_ConsumerVolumeProfit[key].value,
+#DELETE:#            "Operator": model.p_ConsumerOperator[key],
+#DELETE:#        }
+#DELETE:#        for key in model.p_ConsumerVolumeProfit
+#DELETE:#    )
+#DELETE:#    df_ProducerTransportProfit = pd.DataFrame(
+#DELETE:#        {
+#DELETE:#            "Producer Index": key,
+#DELETE:#            "Profit": model.p_ProducerTotalTransportProfit[key].value,
+#DELETE:#            "Operator": model.p_ProducerOperator[key],
+#DELETE:#        }
+#DELETE:#        for key in model.p_ProducerTotalTransportProfit
+#DELETE:#    )
+#DELETE:#    df_ConsumerTransportProfit = pd.DataFrame(
+#DELETE:#        {
+#DELETE:#            "Consumer Index": key,
+#DELETE:#            "Profit": model.p_ConsumerTotalTransportProfit[key].value,
+#DELETE:#            "Operator": model.p_ConsumerOperator[key],
+#DELETE:#        }
+#DELETE:#        for key in model.p_ConsumerTotalTransportProfit
+#DELETE:#    )
+#DELETE:#
+#DELETE:#    # convert to dictionaries for easy json output
+#DELETE:#    d_ProducerVolumeProfit = df_ProducerVolumeProfit.to_dict(orient="records")
+#DELETE:#    d_ConsumerVolumeProfit = df_ConsumerVolumeProfit.to_dict(orient="records")
+#DELETE:#    d_ProducerTransportProfit = df_ProducerTransportProfit.to_dict(orient="records")
+#DELETE:#    d_ConsumerTransportProfit = df_ConsumerTransportProfit.to_dict(orient="records")
+#DELETE:#    with open(profits_dir, "w") as data_file:
+#DELETE:#        json.dump(
+#DELETE:#            {
+#DELETE:#                "Supply": d_ProducerVolumeProfit,
+#DELETE:#                "Demand": d_ConsumerVolumeProfit,
+#DELETE:#                "Transport (Producer)": d_ProducerTransportProfit,
+#DELETE:#                "Transport (Consumer)": d_ConsumerTransportProfit,
+#DELETE:#            },
+#DELETE:#            data_file,
+#DELETE:#            indent=2,
+#DELETE:#        )
+#DELETE:#    return None
 
 
-    model.p_ProducerPipelProfit = Param(
-        model.s_PI,
-        model.s_PPUnique,
-        model.s_CPUnique,
-        model.s_T,
-        within=Any,
-        initialize=ProducerPipelProfitINIT,
-        units=model.model_units["currency"],
-        doc="Producer per-line pipeline transport profit [currency]",
-    )
-
-    # Producer Transport Total Profit
-    def ProducerTotalProfitINIT(model, pi):
-        return sum(
-            model.p_ProducerTruckProfit[pii, p, c, t]
-            for (pii, p, c, t) in model.s_LP_truck
-            if pii == pi
-        ) + sum(
-            model.p_ProducerPipelProfit[pii, p, c, t]
-            for (pii, p, c, t) in model.s_LP_pipel
-            if pii == pi
-        )
-
-    model.p_ProducerTotalTransportProfit = Param(
-        model.s_PI,
-        within=Any,
-        initialize=ProducerTotalProfitINIT,
-        units=model.model_units["currency"],
-        doc="Producer total combined transport profit [currency]",
-    )
-
-    # Consumer Trucking Transport per-route Profit
-    def ConsumerTruckProfitINIT(model, ci, p, c, t):
-        try:
-            # Is the variable defined here? (If it is, the constraint and price should be, too, so this check should be sufficient.)
-            v_FC_truck_key = model.v_FC_truck[ci, p, c, t]
-        except KeyError:
-            return 0
-        else:
-            return (
-                model.p_TransportPrice[p, c, t] - model.p_ConsumerTransportBidTruck[ci]
-            ) * v_FC_truck_key
-
-    model.p_ConsumerTruckProfit = Param(
-        model.s_CI,
-        model.s_PPUnique,
-        model.s_CPUnique,
-        model.s_T,
-        within=Any,
-        initialize=ConsumerTruckProfitINIT,
-        units=model.model_units["currency"],
-        doc="Consumer per-route trucking transport profit [currency]",
-    )
-
-    # Consumer Piping Transport per-route Profit
-    def ConsumerPipelProfitINIT(model, ci, p, c, t):
-        try:
-            # Is the variable defined here? (If it is, the constraint and price should be, too, so this check should be sufficient.)
-            v_FC_pipel_key = model.v_FC_pipel[ci, p, c, t]
-        except KeyError:
-            return 0
-        else:
-            return (
-                model.p_TransportPrice[p, c, t] - model.p_ConsumerTransportBidPipel[ci]
-            ) * v_FC_pipel_key
-
-    model.p_ConsumerPipelProfit = Param(
-        model.s_CI,
-        model.s_PPUnique,
-        model.s_CPUnique,
-        model.s_T,
-        within=Any,
-        initialize=ConsumerPipelProfitINIT,
-        units=model.model_units["currency"],
-        doc="Consumer per-line pipeline transport profit [currency]",
-    )
-
-    # Consumer Transport Total Profit
-    def ConsumerTotalProfitINIT(model, ci):
-        return sum(
-            model.p_ConsumerTruckProfit[cii, p, c, t]
-            for (cii, p, c, t) in model.s_LC_truck
-            if cii == ci
-        ) + sum(
-            model.p_ConsumerPipelProfit[cii, p, c, t]
-            for (cii, p, c, t) in model.s_LC_pipel
-            if cii == ci
-        )
-
-    model.p_ConsumerTotalTransportProfit = Param(
-        model.s_CI,
-        within=Any,
-        initialize=ConsumerTotalProfitINIT,
-        units=model.model_units["currency"],
-        doc="Consumer total combined transport profit [currency]",
-    )
-
-    # Run dev_check_outputs here if you want to interrogate prices and profits directly in the console
-    #dev_check_outputs(model)
-    return model
+#DELETE:## Post-solve calculations
+#DELETE:#def PostSolve(model):
+    #DELETE:#"""
+    #DELETE:## NOTE: Dual variables *might* be defined in the negative by a given solver
+    #DELETE:## (i.e., solver returns a negative value where the "correct" interpretation is positive);
+    #DELETE:## may need to multiply by -1 to get meaningful results
+    #DELETE:## GLPK does this; multiply duals by (-1) if using GLPK.
+    #DELETE:## SEARCH for "(-1) multiplier" to find where this is/needs to be done
+    #DELETE:#"""
+    #DELETE:#### PRICES
+    #DELETE:## Get producer Nodal Prices from clearing constraint dual variables
+    #DELETE:#def ProducerNodalPriceINIT(model, p, t):
+    #DELETE:#    try:
+    #DELETE:#        # Is the constraint defined at these indices?
+    #DELETE:#        dual_key = model.ProducerSupplyBalance[p, t]
+    #DELETE:#    except KeyError:
+    #DELETE:#        return None # return None if not index defined
+    #DELETE:#    else:
+    #DELETE:#        # NOTE: (-1) multiplier here for dual; some solvers output "negative" dual values
+    #DELETE:#        return (-1) * model.dual[dual_key]
+    #DELETE:#
+    #DELETE:#model.p_ProducerNodalPrice = Param(
+    #DELETE:#    model.s_PPUnique,
+    #DELETE:#    model.s_T,
+    #DELETE:#    within=Any,
+    #DELETE:#    initialize=ProducerNodalPriceINIT,
+    #DELETE:#    units=model.model_units["currency_volume"],
+    #DELETE:#    doc="Producer Nodal Price [currency_volume]",
+    #DELETE:#)
+    #DELETE:#
+    #DELETE:## Get consumer Nodal Prices from clearing constraint dual variables
+    #DELETE:#def ConsumerNodalPriceINIT(model, c, t):
+    #DELETE:#    try:
+    #DELETE:#        # Is the constraint defined at these indices?
+    #DELETE:#        dual_key = model.ConsumerDemandBalance[c, t]
+    #DELETE:#    except KeyError:
+    #DELETE:#        return None # return None if not index defined
+    #DELETE:#    else:
+    #DELETE:#        # NOTE: (-1) multiplier here for dual
+    #DELETE:#        return (-1) * model.dual[dual_key]
+    #DELETE:#
+    #DELETE:#model.p_ConsumerNodalPrice = Param(
+    #DELETE:#    model.s_CPUnique,
+    #DELETE:#    model.s_T,
+    #DELETE:#    within=Any,
+    #DELETE:#    initialize=ConsumerNodalPriceINIT,
+    #DELETE:#    units=model.model_units["currency_volume"],
+    #DELETE:#    doc="Consumer Nodal Price [currency_volume]",
+    #DELETE:#)
+    #DELETE:#
+    #DELETE:## Get trucking nodal prices from nodal price differences
+    #DELETE:#def TransportPriceINIT(model, p, c, t):
+    #DELETE:#    try:
+    #DELETE:#        # Is the constraint defined at these indices?
+    #DELETE:#        dual_key_D = model.ConsumerDemandBalance[c, t]
+    #DELETE:#        dual_key_S = model.ProducerSupplyBalance[p, t]
+    #DELETE:#    except KeyError:
+    #DELETE:#        return None # return None if not index defined
+    #DELETE:#    else:
+    #DELETE:#        # NOTE: (-1) multiplier here for dual
+    #DELETE:#        return (-1) * model.dual[dual_key_D] - (-1) * model.dual[dual_key_S]
+    #DELETE:#
+    #DELETE:#model.p_TransportPrice = Param(
+    #DELETE:#    model.s_PPUnique,
+    #DELETE:#    model.s_CPUnique,
+    #DELETE:#    model.s_T,
+    #DELETE:#    within=Any,
+    #DELETE:#    initialize=TransportPriceINIT,
+    #DELETE:#    units=model.model_units["currency_volume"],
+    #DELETE:#    doc="Transport Nodal Price [currency_volume]",
+    #DELETE:#)
+    #DELETE:#
+    #DELETE:#### PROFITS
+    #DELETE:## Supplier Volume Profit
+    #DELETE:#def ProducerVolumeProfitINIT(model, pi):
+    #DELETE:#    p = model.p_ProducerPadUnique[pi]
+    #DELETE:#    try:
+    #DELETE:#        return sum(
+    #DELETE:#            (
+    #DELETE:#                model.p_ProducerNodalPrice[p, t].value
+    #DELETE:#                - model.p_ProducerSupplyBid[pi].value
+    #DELETE:#            )
+    #DELETE:#            * model.v_Supply[pi, t].value
+    #DELETE:#            for t in model.s_T_pi[pi]
+    #DELETE:#        )
+    #DELETE:#    except:
+    #DELETE:#        return 0
+    #DELETE:#
+    #DELETE:#model.p_ProducerVolumeProfit = Param(
+    #DELETE:#    model.s_PI,
+    #DELETE:#    within=Any,
+    #DELETE:#    initialize=ProducerVolumeProfitINIT,
+    #DELETE:#    units=model.model_units["currency"],
+    #DELETE:#    doc="Producer volume profit [currency]",
+    #DELETE:#)
+    #DELETE:#
+    #DELETE:## Consumer Profit
+    #DELETE:#def ConsumerVolumeProfitINIT(model, ci):
+    #DELETE:#    c = model.p_ConsumerPadUnique[ci]
+    #DELETE:#    try:
+    #DELETE:#        return sum(
+    #DELETE:#            (
+    #DELETE:#                model.p_ConsumerDemandBid[ci].value
+    #DELETE:#                - model.p_ConsumerNodalPrice[c, t].value
+    #DELETE:#            )
+    #DELETE:#            * model.v_Demand[ci, t].value
+    #DELETE:#            for t in model.s_T_ci[ci]
+    #DELETE:#        )
+    #DELETE:#    except:
+    #DELETE:#        return 0
+    #DELETE:#
+    #DELETE:#model.p_ConsumerVolumeProfit = Param(
+    #DELETE:#    model.s_CI,
+    #DELETE:#    within=Any,
+    #DELETE:#    initialize=ConsumerVolumeProfitINIT,
+    #DELETE:#    units=model.model_units["currency"],
+    #DELETE:#    doc="Consumer profit [currency]",
+    #DELETE:#)
+    #DELETE:#
+    #DELETE:## Producer Trucking Transport per-route Profit
+    #DELETE:#def ProducerTruckProfitINIT(model, pi, p, c, t):
+    #DELETE:#    try:
+    #DELETE:#        # Is the variable defined here? (If it is, the constraint and price should be, too, so this check should be sufficient.)
+    #DELETE:#        v_FP_truck_key = model.v_FP_truck[pi, p, c, t]
+    #DELETE:#    except KeyError:
+    #DELETE:#        return 0
+    #DELETE:#    else:
+    #DELETE:#        return (
+    #DELETE:#            model.p_TransportPrice[p, c, t] - model.p_ProducerTransportBidTruck[pi]
+    #DELETE:#        ) * v_FP_truck_key
+    #DELETE:#
+    #DELETE:#model.p_ProducerTruckProfit = Param(
+    #DELETE:#    model.s_PI,
+    #DELETE:#    model.s_PPUnique,
+    #DELETE:#    model.s_CPUnique,
+    #DELETE:#    model.s_T,
+    #DELETE:#    within=Any,
+    #DELETE:#    initialize=ProducerTruckProfitINIT,
+    #DELETE:#    units=model.model_units["currency"],
+    #DELETE:#    doc="Producer per-route trucking transport profit [currency]",
+    #DELETE:#)
+    #DELETE:#
+    #DELETE:## Producer Piping Transport per-route Profit
+    #DELETE:#def ProducerPipelProfitINIT(model, pi, p, c, t):
+    #DELETE:#    try:
+    #DELETE:#        # Is the variable defined here? (If it is, the constraint and price should be, too, so this check should be sufficient.)
+    #DELETE:#        v_FP_pipel_key = model.v_FP_pipel[pi, p, c, t]
+    #DELETE:#    except KeyError:
+    #DELETE:#        return 0
+    #DELETE:#    else:
+    #DELETE:#        return (
+    #DELETE:#            model.p_TransportPrice[p, c, t].value - model.p_ProducerTransportBidPipel[pi].value
+    #DELETE:#        ) * v_FP_pipel_key
+    #DELETE:#
+    #DELETE:#
+    #DELETE:#model.p_ProducerPipelProfit = Param(
+    #DELETE:#    model.s_PI,
+    #DELETE:#    model.s_PPUnique,
+    #DELETE:#    model.s_CPUnique,
+    #DELETE:#    model.s_T,
+    #DELETE:#    within=Any,
+    #DELETE:#    initialize=ProducerPipelProfitINIT,
+    #DELETE:#    units=model.model_units["currency"],
+    #DELETE:#    doc="Producer per-line pipeline transport profit [currency]",
+    #DELETE:#)
+    #DELETE:#
+    #DELETE:## Producer Transport Total Profit
+    #DELETE:#def ProducerTotalProfitINIT(model, pi):
+    #DELETE:#    return sum(
+    #DELETE:#        model.p_ProducerTruckProfit[pii, p, c, t]
+    #DELETE:#        for (pii, p, c, t) in model.s_LP_truck
+    #DELETE:#        if pii == pi
+    #DELETE:#    ) + sum(
+    #DELETE:#        model.p_ProducerPipelProfit[pii, p, c, t]
+    #DELETE:#        for (pii, p, c, t) in model.s_LP_pipel
+    #DELETE:#        if pii == pi
+    #DELETE:#    )
+    #DELETE:#
+    #DELETE:#model.p_ProducerTotalTransportProfit = Param(
+    #DELETE:#    model.s_PI,
+    #DELETE:#    within=Any,
+    #DELETE:#    initialize=ProducerTotalProfitINIT,
+    #DELETE:#    units=model.model_units["currency"],
+    #DELETE:#    doc="Producer total combined transport profit [currency]",
+    #DELETE:#)
+    #DELETE:#
+    #DELETE:## Consumer Trucking Transport per-route Profit
+    #DELETE:#def ConsumerTruckProfitINIT(model, ci, p, c, t):
+    #DELETE:#    try:
+    #DELETE:#        # Is the variable defined here? (If it is, the constraint and price should be, too, so this check should be sufficient.)
+    #DELETE:#        v_FC_truck_key = model.v_FC_truck[ci, p, c, t]
+    #DELETE:#    except KeyError:
+    #DELETE:#        return 0
+    #DELETE:#    else:
+    #DELETE:#        return (
+    #DELETE:#            model.p_TransportPrice[p, c, t] - model.p_ConsumerTransportBidTruck[ci]
+    #DELETE:#        ) * v_FC_truck_key
+    #DELETE:#
+    #DELETE:#model.p_ConsumerTruckProfit = Param(
+    #DELETE:#    model.s_CI,
+    #DELETE:#    model.s_PPUnique,
+    #DELETE:#    model.s_CPUnique,
+    #DELETE:#    model.s_T,
+    #DELETE:#    within=Any,
+    #DELETE:#    initialize=ConsumerTruckProfitINIT,
+    #DELETE:#    units=model.model_units["currency"],
+    #DELETE:#    doc="Consumer per-route trucking transport profit [currency]",
+    #DELETE:#)
+    #DELETE:#
+    #DELETE:## Consumer Piping Transport per-route Profit
+    #DELETE:#def ConsumerPipelProfitINIT(model, ci, p, c, t):
+    #DELETE:#    try:
+    #DELETE:#        # Is the variable defined here? (If it is, the constraint and price should be, too, so this check should be sufficient.)
+    #DELETE:#        v_FC_pipel_key = model.v_FC_pipel[ci, p, c, t]
+    #DELETE:#    except KeyError:
+    #DELETE:#        return 0
+    #DELETE:#    else:
+    #DELETE:#        return (
+    #DELETE:#            model.p_TransportPrice[p, c, t] - model.p_ConsumerTransportBidPipel[ci]
+    #DELETE:#        ) * v_FC_pipel_key
+    #DELETE:#
+    #DELETE:#model.p_ConsumerPipelProfit = Param(
+    #DELETE:#    model.s_CI,
+    #DELETE:#    model.s_PPUnique,
+    #DELETE:#    model.s_CPUnique,
+    #DELETE:#    model.s_T,
+    #DELETE:#    within=Any,
+    #DELETE:#    initialize=ConsumerPipelProfitINIT,
+    #DELETE:#    units=model.model_units["currency"],
+    #DELETE:#    doc="Consumer per-line pipeline transport profit [currency]",
+    #DELETE:#)
+    #DELETE:#
+    #DELETE:## Consumer Transport Total Profit
+    #DELETE:#def ConsumerTotalProfitINIT(model, ci):
+    #DELETE:#    return sum(
+    #DELETE:#        model.p_ConsumerTruckProfit[cii, p, c, t]
+    #DELETE:#        for (cii, p, c, t) in model.s_LC_truck
+    #DELETE:#        if cii == ci
+    #DELETE:#    ) + sum(
+    #DELETE:#        model.p_ConsumerPipelProfit[cii, p, c, t]
+    #DELETE:#        for (cii, p, c, t) in model.s_LC_pipel
+    #DELETE:#        if cii == ci
+    #DELETE:#    )
+    #DELETE:#
+    #DELETE:#model.p_ConsumerTotalTransportProfit = Param(
+    #DELETE:#    model.s_CI,
+    #DELETE:#    within=Any,
+    #DELETE:#    initialize=ConsumerTotalProfitINIT,
+    #DELETE:#    units=model.model_units["currency"],
+    #DELETE:#    doc="Consumer total combined transport profit [currency]",
+    #DELETE:#)
+    #DELETE:#
+    #DELETE:## Run dev_check_outputs here if you want to interrogate prices and profits directly in the console
+    #DELETE:##dev_check_outputs(model)
+    #DELETE:#return model
 
 
 # Basic data views
@@ -2529,39 +2518,39 @@ def PostSolveViews(model, save_dir):
     fo.write("\nObjective")
     fo.write("\n" + str(value(model.objective)))
 
-    # Producer Profits
-    fo.write("\n" + PrintSpacer)
-    fo.write("\nProducer Profits [currency]")
-    for pi in model.s_PI:
-        fo.write("\n" + pi + ": " + str(model.p_ProducerVolumeProfit[pi].value))
-
-    # Consumer Profits
-    fo.write("\n" + PrintSpacer)
-    fo.write("\nConsumer Profits [currency]")
-    for ci in model.s_CI:
-        fo.write("\n" + ci + ": " + str(model.p_ConsumerVolumeProfit[ci].value))
-
-    # Midstream per-route Profits
-    fo.write("\n" + PrintSpacer)
-    fo.write("\nMidstream Profits [currency]")
-    for (mi, p, c, tp, tc) in model.s_LLM:
-        fo.write(
-            "\n"
-            + ",".join((mi, p, c, tp, tc))
-            + ": "
-            + str(model.p_MidstreamRouteProfit[mi, p, c, tp, tc].value)
-        )
-
-    # Producer per-route Profits
-    fo.write("\n" + PrintSpacer)
-    fo.write("\nProducer Transportation Profits (per-route) [currency]")
-    for (pi, p, c, t) in model.s_LP_truck:
-        fo.write(
-            "\n"
-            + ",".join((pi, p, c, t))
-            + ": "
-            + str(model.p_ProducerTruckProfit[pi, p, c, t].value)
-        )
+    #DELETE:## Producer Profits
+    #DELETE:#fo.write("\n" + PrintSpacer)
+    #DELETE:#fo.write("\nProducer Profits [currency]")
+    #DELETE:#for pi in model.s_PI:
+    #DELETE:#    fo.write("\n" + pi + ": " + str(model.p_ProducerVolumeProfit[pi].value))
+    #DELETE:#
+    #DELETE:## Consumer Profits
+    #DELETE:#fo.write("\n" + PrintSpacer)
+    #DELETE:#fo.write("\nConsumer Profits [currency]")
+    #DELETE:#for ci in model.s_CI:
+    #DELETE:#    fo.write("\n" + ci + ": " + str(model.p_ConsumerVolumeProfit[ci].value))
+    #DELETE:#
+    #DELETE:## Midstream per-route Profits
+    #DELETE:#fo.write("\n" + PrintSpacer)
+    #DELETE:#fo.write("\nMidstream Profits [currency]")
+    #DELETE:#for (mi, p, c, tp, tc) in model.s_LLM:
+    #DELETE:#    fo.write(
+    #DELETE:#        "\n"
+    #DELETE:#        + ",".join((mi, p, c, tp, tc))
+    #DELETE:#        + ": "
+    #DELETE:#        + str(model.p_MidstreamRouteProfit[mi, p, c, tp, tc].value)
+    #DELETE:#    )
+    #DELETE:#
+    #DELETE:## Producer per-route Profits
+    #DELETE:#fo.write("\n" + PrintSpacer)
+    #DELETE:#fo.write("\nProducer Transportation Profits (per-route) [currency]")
+    #DELETE:#for (pi, p, c, t) in model.s_LP_truck:
+    #DELETE:#    fo.write(
+    #DELETE:#        "\n"
+    #DELETE:#        + ",".join((pi, p, c, t))
+    #DELETE:#        + ": "
+    #DELETE:#        + str(model.p_ProducerTruckProfit[pi, p, c, t].value)
+    #DELETE:#    )
 
     # Producer variable value
     fo.write("\n" + PrintSpacer)
@@ -2606,32 +2595,32 @@ def PostSolveViews(model, save_dir):
             + str(model.v_FP_truck[pi, p, c, t].value)
         )
 
-    # Producer nodal prices
-    fo.write("\n" + PrintSpacer)
-    fo.write("\nProducer Nodal Prices [currency_volume]")
-    for (p, t) in model.s_PPUnique * model.s_T:
-        fo.write(
-            "\n" + ",".join((p, t)) + ": " + str(model.p_ProducerNodalPrice[p, t].value)
-        )
-
-    # Consumer nodal prices
-    fo.write("\n" + PrintSpacer)
-    fo.write("\nConsumer Nodal Prices [currency_volume]")
-    for (c, t) in model.s_CPUnique * model.s_T:
-        fo.write(
-            "\n" + ",".join((c, t)) + ": " + str(model.p_ConsumerNodalPrice[c, t].value)
-        )
-
+    #DELETE:## Producer nodal prices
+    #DELETE:#fo.write("\n" + PrintSpacer)
+    #DELETE:#fo.write("\nProducer Nodal Prices [currency_volume]")
+    #DELETE:#for (p, t) in model.s_PPUnique * model.s_T:
+    #DELETE:#    fo.write(
+    #DELETE:#        "\n" + ",".join((p, t)) + ": " + str(model.p_ProducerNodalPrice[p, t].value)
+    #DELETE:#    )
+    #DELETE:#
+    #DELETE:## Consumer nodal prices
+    #DELETE:#fo.write("\n" + PrintSpacer)
+    #DELETE:#fo.write("\nConsumer Nodal Prices [currency_volume]")
+    #DELETE:#for (c, t) in model.s_CPUnique * model.s_T:
+    #DELETE:#    fo.write(
+    #DELETE:#        "\n" + ",".join((c, t)) + ": " + str(model.p_ConsumerNodalPrice[c, t].value)
+    #DELETE:#    )
+    #DELETE:#
     # Transportation prices
-    fo.write("\n" + PrintSpacer)
-    fo.write("\nTransportation Prices [currency_volume]")
-    for (p, c, tp, tc) in model.s_PPUnique * model.s_CPUnique * model.s_T * model.s_T:
-        fo.write(
-            "\n"
-            + ",".join((p, c, tp, tc))
-            + ": "
-            + str(model.p_TransportPrice[p, c, tp, tc].value)
-        )
+    #DELETE:#fo.write("\n" + PrintSpacer)
+    #DELETE:#fo.write("\nTransportation Prices [currency_volume]")
+    #DELETE:#for (p, c, tp, tc) in model.s_PPUnique * model.s_CPUnique * model.s_T * model.s_T:
+    #DELETE:#    fo.write(
+    #DELETE:#        "\n"
+    #DELETE:#        + ",".join((p, c, tp, tc))
+    #DELETE:#        + ": "
+    #DELETE:#        + str(model.p_TransportPrice[p, c, tp, tc].value)
+     #DELETE:#   )
 
     fo.close()
     return None
