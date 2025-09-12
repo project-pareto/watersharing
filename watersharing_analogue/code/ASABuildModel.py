@@ -1124,7 +1124,7 @@ def create_model(
     ### Variable Bounds
     # Producer trucking bound
     def p_FP_truck_UB_init(model, pi, p, c, tp):
-        if tp in model.s_T_pi[pi]:
+        if tp in model.s_T_pi[pi] and model.p_Consumer_Trucks_Accepted[c]:
             return model.p_ProducerTransportCapacityTruck[pi]
         else:
             return 0
@@ -1144,7 +1144,7 @@ def create_model(
 
     # Producer piping bound
     def p_FP_pipel_UB_init(model, pi, p, c, tp):
-        if tp in model.s_T_pi[pi]:
+        if tp in model.s_T_pi[pi] and model.p_Consumer_Pipes_Accepted[c]:
             return model.p_ProducerTransportCapacityPipel[pi]
         else:
             return 0
@@ -1164,7 +1164,7 @@ def create_model(
 
     # Consumer trucking bound
     def p_FC_truck_UB_init(model, ci, p, c, tc):
-        if tc in model.s_T_ci[ci]:
+        if tc in model.s_T_ci[ci] and model.p_Producer_Trucks_Accepted[p]:
             return model.p_ConsumerTransportCapacityTruck[ci]
         else:
             return 0
@@ -1184,7 +1184,7 @@ def create_model(
 
     # Consumer piping bound
     def p_FC_pipel_UB_init(model, ci, p, c, tc):
-        if tc in model.s_T_ci[ci]:
+        if tc in model.s_T_ci[ci] and model.p_Producer_Pipes_Accepted[p]:
             return model.p_ConsumerTransportCapacityPipel[ci]
         else:
             return 0

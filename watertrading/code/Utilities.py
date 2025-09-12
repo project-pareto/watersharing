@@ -337,25 +337,6 @@ def add_dataframe_prices(df, price_source, type):
 
 
 ##################################################
-def add_dataframe_supply_coords(df, df_producer):
-    """
-    Inputs:
-    > df - a dataframe including producer
-
-    Outputs:
-    > dist_matrix - a distance matrix
-
-    FUNCTION DESCRIPTION:
-    > Adds distances between start and end destinations in df to df as a new column
-    """
-    distances = []
-    for index, row in df.iterrows():
-        dist = dist_matrix.loc[row["From wellpad"], row["To wellpad"]]
-        distances.append(dist)
-    return distances
-
-
-##################################################
 def GetUniqueDFData(df, key_col, val_col):
     """
     Returns a dictionary of unique dataframe entries keyed from one colum to another
