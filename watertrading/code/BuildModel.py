@@ -113,11 +113,15 @@ def get_data(
     with open(request_dir, "r") as read_file:
         request_data = json.load(read_file)
 
-        # Place producer and consumer data into dataframes
+        # Place producer and consumer data into dataframes; force index column to string type to avoid concatenation issues later; set Index colun to index
         df_producer = pd.DataFrame(data=request_data["Producers"])
+        df_producer["Index"] = df_producer["Index"].astype(str)
         df_producer.set_index("Index", inplace=True)
+
         df_consumer = pd.DataFrame(data=request_data["Consumers"])
+        df_consumer["Index"] = df_consumer["Index"].astype(str)
         df_consumer.set_index("Index", inplace=True)
+
         df_restrictions = pd.DataFrame(data=request_data["Restrictions"])
         if filter_by_date is not None:
             FilterRequests(df_producer, df_consumer, filter_by_date)
