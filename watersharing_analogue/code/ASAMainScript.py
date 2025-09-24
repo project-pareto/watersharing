@@ -95,10 +95,8 @@ def run_optimization_models(
     # Output result
     if results.solver.termination_condition == TerminationCondition.optimal:
         print("results are optimal")
-        #DELETE:# water_sharing = ASABuildModel.PostSolve(water_sharing)
         ASABuildModel.jsonize_outputs(water_sharing, matches_dir)
         ASABuildModel.OutputMatchesToUsers(matches_dir, output_dir)
-        #DELETE:# ASABuildModel.jsonize_profits(water_sharing, profits_dir)
         # BuildModel.DataViews(water_sharing, data_dir)
         # BuildModel.PostSolveViews(water_sharing, data_dir)
         return None
