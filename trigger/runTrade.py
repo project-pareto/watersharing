@@ -30,5 +30,7 @@ def run_watertrading(in_path_trading, ex_path_trading):
         "profits": "_profits_" + date_time + ".json",
     }
 
+    match_detail_dir = os.path.join(in_path_trading, "match-detail")
+
     # Run water trading optimization model
-    WT.run_optimization_models(data_dir=in_path_trading, output_dir=in_path_trading, file_names=file_names, Update_distance_matrix=True)
+    WT.run_optimization_models(data_dir=in_path_trading, output_dir=match_detail_dir, file_names=file_names, Update_distance_matrix=True)
