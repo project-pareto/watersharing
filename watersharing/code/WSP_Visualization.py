@@ -142,7 +142,7 @@ def SummaryPlot(input_dir,MATCHES_JSON,REQUESTS_JSON,DISTANCE_JSON,fig_name="plo
     #print("Merged:")
     #print(df_match)
     #df_match.to_excel("merged_matches.xlsx") # save to excel for convenience
-    df_match['Date'] = df_match['Date'].dt.strftime("%Y-%m-%d") # convert date to because DateTime isn't compatible with JSON
+    df_match['Date'] = df_match['Date'].dt.strftime("%Y/%m/%d") # convert date to because DateTime isn't compatible with JSON
     d_match = df_match.to_dict(orient='records') # convert dataframe to dict; we'll use JSON.py, not the pandas built-in JSON export (more formatting control)
     MATCHES_PLUS_JSON = MATCHES_JSON.replace('.json', '_plus.json') # add "plus" to the file name so we don't overwrite the original
     with open(MATCHES_PLUS_JSON, "w") as data_file:

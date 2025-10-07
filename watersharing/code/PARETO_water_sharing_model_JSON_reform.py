@@ -120,14 +120,14 @@ def get_data(REQUESTS_JSON,DISTANCE_JSON,Update_distance_matrix=False):
     # Producer inputs
     df_producer = pd.DataFrame(data=request_data["Producers"])
     # convert time inputs to datetime
-    df_producer['Start Date'] = pd.to_datetime(df_producer['Start Date'], format ="%Y-%m-%d")
-    df_producer['End Date'] = pd.to_datetime(df_producer['End Date'], format ="%Y-%m-%d")
+    df_producer['Start Date'] = pd.to_datetime(df_producer['Start Date'], format ="%Y/%m/%d")
+    df_producer['End Date'] = pd.to_datetime(df_producer['End Date'], format ="%Y/%m/%d")
 
     # Consumer inputs
     df_consumer = pd.DataFrame(data=request_data["Consumers"])
     # convert time inputs to datetime
-    df_consumer['Start Date'] = pd.to_datetime(df_consumer['Start Date'], format ="%Y-%m-%d")
-    df_consumer['End Date'] = pd.to_datetime(df_consumer['End Date'], format ="%Y-%m-%d")
+    df_consumer['Start Date'] = pd.to_datetime(df_consumer['Start Date'], format ="%Y/%m/%d")
+    df_consumer['End Date'] = pd.to_datetime(df_consumer['End Date'], format ="%Y/%m/%d")
 
     # Matching restrictions
     df_restrictions = pd.DataFrame(data=request_data["Restrictions"])
@@ -180,8 +180,8 @@ def create_model(restricted_set, df_producer, df_consumer, df_distance, df_time,
     # DETERMINE DATE RANGE - assume need to optimize from the earliest date to the latest date in data
     first_date = min(df_producer['Start Date'].append(df_consumer['Start Date']))
     last_date = max(df_producer['End Date'].append(df_consumer['End Date']))
-    #first_date = min(pd.concat([df_producer['Start Date'].dt.strftime("%Y-%m-%d"),df_consumer['Start Date'].dt.strftime("%Y-%m-%d")], axis=0))
-    #last_date = max(pd.concat([df_producer['Start Date'].dt.strftime("%Y-%m-%d"),df_consumer['Start Date'].dt.strftime("%Y-%m-%d")], axis=0))
+    #first_date = min(pd.concat([df_producer['Start Date'].dt.strftime("%Y/%m/%d"),df_consumer['Start Date'].dt.strftime("%Y/%m/%d")], axis=0))
+    #last_date = max(pd.concat([df_producer['Start Date'].dt.strftime("%Y/%m/%d"),df_consumer['Start Date'].dt.strftime("%Y/%m/%d")], axis=0))
     #first_date = min(pd.concat([df_producer['Start Date'],df_consumer['Start Date']], axis=0))
     #last_date = max(pd.concat([df_producer['Start Date'],df_consumer['Start Date']], axis=0))
 
@@ -632,5 +632,5 @@ def create_dataframe(model):
                                         for key in model.v_F_Trucked 
                                         if value(model.v_F_Trucked[key])>0.01)
     # Timestamps (i.e., Pandas datetime format) are not JSON serializable; convert to string
-    df_v_Truck['Date']= df_v_Truck['Date'].dt.strftime("%Y-%m-%d")
+    df_v_Truck['Date']= df_v_Truck['Date'].dt.strftime("%Y/%m/%d")
     return df_v_Truck

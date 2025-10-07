@@ -43,9 +43,9 @@ def run_optimization_models(
 
     # Set up file path names
     request_dir = join(data_dir, file_names["requests"])
-    distance_dir = join(output_dir, file_names["distance"])
-    matches_dir = join(output_dir, file_names["matches"])
-    profits_dir = join(output_dir, file_names["profits"])
+    distance_dir = join(data_dir, file_names["distance"])
+    matches_dir = join(data_dir, file_names["matches"])
+    profits_dir = join(data_dir, file_names["profits"])
 
     # Build model
     (
@@ -97,7 +97,7 @@ def run_optimization_models(
         print("results are optimal")
         water_sharing = BuildModel.PostSolve(water_sharing)
         BuildModel.jsonize_outputs(water_sharing, matches_dir)
-        BuildModel.OutputMatchesToUsers(matches_dir, join(output_dir,"match-detail"))
+        BuildModel.OutputMatchesToUsers(matches_dir,output_dir)
         BuildModel.jsonize_profits(water_sharing, profits_dir)
         # BuildModel.DataViews(water_sharing, data_dir)
         # BuildModel.PostSolveViews(water_sharing, data_dir)

@@ -31,4 +31,4 @@ def run_watertrading(in_path_trading, ex_path_trading):
     }
 
     # Run water trading optimization model
-    WT.run_optimization_models(data_dir=ex_path_trading, output_dir=in_path_trading, file_names=file_names, Update_distance_matrix=True)
+    WT.run_optimization_models(data_dir=in_path_trading, output_dir=in_path_trading, file_names=file_names, Update_distance_matrix=True)

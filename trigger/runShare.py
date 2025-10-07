@@ -20,8 +20,13 @@ def run_watersharing(in_path_sharing, ex_path_sharing):
         raise Exception("Error: Target folder is empty or does not exist")
 
     latest_file = max(list_of_files, key=os.path.getmtime)
-    DISTANCE_JSON = os.path.join(in_path_sharing, "GWPC_V2\\GWPC_V2_distance.json")
-    MATCHES_JSON = os.path.join(in_path_sharing, "GWPC_V2\\GWPC_V2_matches.json")
+    
+    gwpc_dir = os.path.join(in_path_sharing, "GWPC_V2")
+    if not os.path.exists(gwpc_dir):
+        os.makedirs(gwpc_dir)
+    
+    DISTANCE_JSON = os.path.join(gwpc_dir, "GWPC_V2_distance.json")
+    MATCHES_JSON = os.path.join(gwpc_dir, "GWPC_V2_matches.json")
 
     # Run water sharing optimization model
     WS.run_optimization_models(latest_file, DISTANCE_JSON, MATCHES_JSON, Update_distance_matrix=True)

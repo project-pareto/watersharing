@@ -45,17 +45,17 @@ def csv_2_json(input_dir,PRODUCER_CSV,CONSUMER_CSV,name="jsonized_data.json"):
 
     # Read in producer data; convert date data to datetime to enforce proper format, and then to string for JSON export (datetime is not compatible)
     df_producer = pd.read_csv(os.path.join(input_dir,PRODUCER_CSV))
-    df_producer['Start Date'] = pd.to_datetime(df_producer['Start Date'], format ="%Y-%m-%d")
-    df_producer['End Date'] = pd.to_datetime(df_producer['End Date'], format ="%Y-%m-%d")
-    df_producer['Start Date'] = df_producer['Start Date'].dt.strftime("%Y-%m-%d")
-    df_producer['End Date']= df_producer['End Date'].dt.strftime("%Y-%m-%d")
+    df_producer['Start Date'] = pd.to_datetime(df_producer['Start Date'], format ="%Y/%m/%d")
+    df_producer['End Date'] = pd.to_datetime(df_producer['End Date'], format ="%Y/%m/%d")
+    df_producer['Start Date'] = df_producer['Start Date'].dt.strftime("%Y/%m/%d")
+    df_producer['End Date']= df_producer['End Date'].dt.strftime("%Y/%m/%d")
 
     # Read in consumer data; convert date data to datetime to enforce proper format, and then to string for JSON export (datetime is not compatible)
     df_consumer = pd.read_csv(os.path.join(input_dir,CONSUMER_CSV))
-    df_consumer['Start Date'] = pd.to_datetime(df_consumer['Start Date'], format ="%Y-%m-%d")
-    df_consumer['End Date'] = pd.to_datetime(df_consumer['End Date'], format ="%Y-%m-%d")
-    df_consumer['Start Date'] = df_consumer['Start Date'].dt.strftime("%Y-%m-%d")
-    df_consumer['End Date']= df_consumer['End Date'].dt.strftime("%Y-%m-%d")
+    df_consumer['Start Date'] = pd.to_datetime(df_consumer['Start Date'], format ="%Y/%m/%d")
+    df_consumer['End Date'] = pd.to_datetime(df_consumer['End Date'], format ="%Y/%m/%d")
+    df_consumer['Start Date'] = df_consumer['Start Date'].dt.strftime("%Y/%m/%d")
+    df_consumer['End Date']= df_consumer['End Date'].dt.strftime("%Y/%m/%d")
 
     # Convert dataframes to dictionaries for export (we will use json.dump, not the pandas built-in function)
     d_producer = df_producer.to_dict(orient='records')
@@ -90,14 +90,14 @@ def fetch_case_data(REQUESTS_JSON):
     # Producer inputs
     df_producer = pd.DataFrame(data=request_data["Producers"])
     # convert time inputs to datetime
-    df_producer['Start Date'] = pd.to_datetime(df_producer['Start Date'], format ="%Y-%m-%d")
-    df_producer['End Date'] = pd.to_datetime(df_producer['End Date'], format ="%Y-%m-%d")
+    df_producer['Start Date'] = pd.to_datetime(df_producer['Start Date'], format ="%Y/%m/%d")
+    df_producer['End Date'] = pd.to_datetime(df_producer['End Date'], format ="%Y/%m/%d")
 
     # Consumer inputs
     df_consumer = pd.DataFrame(data=request_data["Consumers"])
     # convert time inputs to datetime
-    df_consumer['Start Date'] = pd.to_datetime(df_consumer['Start Date'], format ="%Y-%m-%d")
-    df_consumer['End Date'] = pd.to_datetime(df_consumer['End Date'], format ="%Y-%m-%d")
+    df_consumer['Start Date'] = pd.to_datetime(df_consumer['Start Date'], format ="%Y/%m/%d")
+    df_consumer['End Date'] = pd.to_datetime(df_consumer['End Date'], format ="%Y/%m/%d")
 
     # Matching restrictions
     df_restrictions = pd.DataFrame(data=request_data["Restrictions"])
@@ -148,7 +148,7 @@ def fetch_match_data(MATCHES_JSON):
     # Producer inputs
     df_matches = pd.DataFrame(data=matches_data)
     # convert time inputs to datetime
-    df_matches['Date'] = pd.to_datetime(df_matches['Date'], format ="%Y-%m-%d")
+    df_matches['Date'] = pd.to_datetime(df_matches['Date'], format ="%Y/%m/%d")
 
     return df_matches
 
