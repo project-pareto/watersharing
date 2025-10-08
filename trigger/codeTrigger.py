@@ -17,13 +17,24 @@ class EventHandler(FileSystemEventHandler):
         self.in_path_trading = os.path.abspath(os.path.expanduser(in_path_trading))
     
     def on_any_event(self, event):
+
+        event_path = os.path.abspath(event.src_path)
+
         if event.event_type == 'created' and event.src_path.endswith('.json'):
-            if self.ex_path_sharing in event.src_path:
-                print("Running water sharing function")  # Debug line for path match
-                run_watersharing(self.in_path_sharing, self.ex_path_sharing)
-            elif self.ex_path_trading in event.src_path:
-                print("Running water trading function")  # Debug line for path match
-                run_watertrading(self.in_path_trading, self.ex_path_trading)
+            if self.ex_path_sharing in event_path:
+                print("Running water sharing function") 
+                try:
+                    run_watersharing(self.in_path_sharing, self.ex_path_sharing)
+                except Exception as e:
+                    print(f"Error during water sharing function: {e}")
+            elif self.ex_path_trading in event_path:
+                print("Running water trading function")  
+                try:
+                    run_watertrading(self.in_path_trading, self.ex_path_trading)
+                except Exception as e:
+                    print(f"Error during water trading function: {e}")
+            else:
+                print("Error while tracing file creation")
 
 # Load paths from config.yaml
 def load_config(config_file_path, mode):

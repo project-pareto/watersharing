@@ -20,15 +20,17 @@ def run_watertrading(in_path_trading, ex_path_trading):
         raise Exception("Error: Target folder is empty or does not exist")
     
     now = datetime.now()
-    date_time = now.strftime("%Y-%m-%d|%H:%M:%S")
+    date_time = now.strftime('%Y-%m-%d_%H-%M-%S')
 
     latest_file = max(list_of_files, key=os.path.getmtime)
     file_names = {
         "requests": latest_file,
-        "distance": "_distance|" + date_time + ".json",
-        "matches": "_matches|" + date_time + ".json",
-        "profits": "_profits|" + date_time + ".json",
+        "distance": "_distance_" + date_time + ".json",
+        "matches": "_matches_" + date_time + ".json",
+        "profits": "_profits_" + date_time + ".json",
     }
 
+    match_detail_dir = os.path.join(in_path_trading, "match-detail")
+
     # Run water trading optimization model
-    WT.run_optimization_models(data_dir=ex_path_trading, output_dir=in_path_trading, file_names=file_names, Update_distance_matrix=True)
+    WT.run_optimization_models(data_dir=in_path_trading, output_dir=match_detail_dir, file_names=file_names, Update_distance_matrix=True)
