@@ -20,7 +20,7 @@ from pyomo.opt import TerminationCondition
 import pyomo.environ
 from pyomo.environ import value
 from pyomo.opt import SolverFactory
-import BuildModel
+import ASABuildModel
 from Utilities import CreateEmptyOutputJSON
 from os import getcwd
 from os.path import join
@@ -34,8 +34,7 @@ def run_optimization_models(
     file_names={
         "requests": "_requests.json",
         "distance": "_distance.json",
-        "matches": "_matches.json",
-        "profits": "_profits.json",
+        "matches": "_matches.json"
     },
     Update_distance_matrix=True,
     filter_by_date=None,
@@ -45,7 +44,6 @@ def run_optimization_models(
     request_dir = join(data_dir, file_names["requests"])
     distance_dir = join(data_dir, file_names["distance"])
     matches_dir = join(data_dir, file_names["matches"])
-    profits_dir = join(data_dir, file_names["profits"])
 
     # Build model
     (
@@ -55,7 +53,7 @@ def run_optimization_models(
         df_road_distance,
         df_road_time,
         df_pipe_distance
-    ) = BuildModel.get_data(
+    ) = ASABuildModel.get_data(
         request_dir,
         distance_dir,
         Update_distance_matrix,
@@ -68,25 +66,25 @@ def run_optimization_models(
     # Run first optimization model
     output_s = f"""
     {spacer}
-    # Starting Optimization Run: Clearing Formulation
+    # Starting Optimization Run: Sharing Formulation
     {spacer}
     """
     print(output_s)
 
-    water_sharing = BuildModel.create_model(
+    water_sharing = ASABuildModel.create_model(
         df_restrictions,
         df_producer,
         df_consumer,
         df_road_distance,
         df_road_time,
         df_pipe_distance,
-        default={},
+        default={}
     )
     # solver = SolverFactory('scip', solver_io='nl')
     # solver = SolverFactory("gurobi")
     solver = SolverFactory("glpk")
     results = solver.solve(water_sharing, tee=True)
-    # Check if market is dry; if so, return an empty match file
+    # Check if no matches; if so, return an empty match file
     if water_sharing.objective() <= 0: # solvers sometimes return -0.
         print("No matches!")
         CreateEmptyOutputJSON(matches_dir)
@@ -97,10 +95,8 @@ def run_optimization_models(
     # Output result
     if results.solver.termination_condition == TerminationCondition.optimal:
         print("results are optimal")
-        water_sharing = BuildModel.PostSolve(water_sharing)
-        BuildModel.jsonize_outputs(water_sharing, matches_dir)
-        BuildModel.OutputMatchesToUsers(matches_dir, output_dir)
-        BuildModel.jsonize_profits(water_sharing, profits_dir)
+        ASABuildModel.jsonize_outputs(water_sharing, matches_dir)
+        ASABuildModel.OutputMatchesToUsers(matches_dir, output_dir)
         # BuildModel.DataViews(water_sharing, data_dir)
         # BuildModel.PostSolveViews(water_sharing, data_dir)
         return None
