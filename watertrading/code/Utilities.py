@@ -58,21 +58,31 @@ def csv_2_json(input_dir, PRODUCER_CSV, CONSUMER_CSV, name="jsonized_data.json")
 
     # Read in producer data; convert date data to datetime to enforce proper format, and then to string for JSON export (datetime is not compatible)
     df_producer = pd.read_csv(os.path.join(input_dir, PRODUCER_CSV))
-    df_producer["Start Date"] = pd.to_datetime(
-        df_producer["Start Date"], format="%Y/%m/%d"
-    )
-    df_producer["End Date"] = pd.to_datetime(df_producer["End Date"], format="%Y/%m/%d")
+    #df_producer["Start Date"] = pd.to_datetime(
+    #    df_producer["Start Date"], format="%Y/%m/%d"
+    #)
+    #df_producer["End Date"] = pd.to_datetime(
+    #    df_producer["End Date"], format="%Y/%m/%d"
+    #)
+    df_producer = excel_date_parser(df_producer)
     df_producer["Start Date"] = df_producer["Start Date"].dt.strftime("%Y/%m/%d")
     df_producer["End Date"] = df_producer["End Date"].dt.strftime("%Y/%m/%d")
 
     # Read in consumer data; convert date data to datetime to enforce proper format, and then to string for JSON export (datetime is not compatible)
     df_consumer = pd.read_csv(os.path.join(input_dir, CONSUMER_CSV))
-    df_consumer["Start Date"] = pd.to_datetime(
-        df_consumer["Start Date"], format="%Y/%m/%d"
-    )
-    df_consumer["End Date"] = pd.to_datetime(df_consumer["End Date"], format="%Y/%m/%d")
+    #df_consumer["Start Date"] = pd.to_datetime(
+    #    df_consumer["Start Date"], format="%Y/%m/%d"
+    #)
+    #df_consumer["End Date"] = pd.to_datetime(
+    #    df_consumer["End Date"], format="%Y/%m/%d"
+    #)
+    df_consumer = excel_date_parser(df_consumer)
     df_consumer["Start Date"] = df_consumer["Start Date"].dt.strftime("%Y/%m/%d")
     df_consumer["End Date"] = df_consumer["End Date"].dt.strftime("%Y/%m/%d")
+
+    # Remove NaN entries due to missing quality (in case missing, that is) and replace with ""
+    df_producer = df_producer.fillna("")
+    df_consumer = df_consumer.fillna("")
 
     # Convert dataframes to dictionaries for export (we will use json.dump, not the pandas built-in function)
     d_producer = df_producer.to_dict(orient="records")
@@ -93,6 +103,30 @@ def csv_2_json(input_dir, PRODUCER_CSV, CONSUMER_CSV, name="jsonized_data.json")
             indent=2,
         )
     return None
+
+
+##################################################
+def excel_date_parser(df):
+    """
+    Excel dates are commonly saved to "%m/%d/%Y" even if the user chooses
+    another format like "%Y-%m-%d". This function checks for the Excel format,
+    then the expected format, and then converts the dates to correct input
+    format for the jsonized data. Likely only called by csv_2_json().
+    """
+    # df_consumer["Start Date"] = pd.to_datetime(df_consumer["Start Date"], format="%Y/%m/%d")
+
+    # Expected date formats
+    formats = ["%m/%d/%Y", "%Y-%m-%d", "%Y/%m/%d"]
+
+    # try each format; continue if one works
+    for f in formats:
+        try:
+            df["Start Date"] = pd.to_datetime(df["Start Date"], format=f)
+            df["End Date"] = pd.to_datetime(df["End Date"], format=f)
+            break # so we don't test date formats in one works
+        except ValueError:
+            continue
+    return df
 
 
 ##################################################
@@ -300,25 +334,6 @@ def add_dataframe_prices(df, price_source, type):
         except:
             prices.append(float("NaN"))
     return prices
-
-
-##################################################
-def add_dataframe_supply_coords(df, df_producer):
-    """
-    Inputs:
-    > df - a dataframe including producer
-
-    Outputs:
-    > dist_matrix - a distance matrix
-
-    FUNCTION DESCRIPTION:
-    > Adds distances between start and end destinations in df to df as a new column
-    """
-    distances = []
-    for index, row in df.iterrows():
-        dist = dist_matrix.loc[row["From wellpad"], row["To wellpad"]]
-        distances.append(dist)
-    return distances
 
 
 ##################################################

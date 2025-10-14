@@ -41,6 +41,8 @@ import numpy as np
 import requests
 import json
 
+from math import radians, sin, cos, asin, sqrt
+
 from Utilities import df_to_dict_helper
 
 
@@ -276,3 +278,158 @@ def get_driving_distance(distance_JSON, DF_PRODUCER, DF_CONSUMER):
         )
 
     return df_times, df_distance
+
+
+
+def estimate_driving_distance(distance_JSON, DF_PRODUCER, DF_CONSUMER, drive_efficiency_factor=1.10, drive_average_speed=25):
+    """
+    Returns a dataframe of distances to be used as estimates of drive distance;
+    these are calculated as "great circle" (Haversine) distances under the assumption that
+    drive distance is proportional to the north-south and east-west components of the haversine
+    distance (great circle components, assuming roads run NS and EW) multiplied by some efficiency
+    factor, defaulting to 10%. 
+    Inputs:
+    - distance_JSON - directory to distance JSON file
+    - DF_PRODUCER - Producer dataframe
+    - DF_CONSUMER - Consumer dataframe
+    Outputs:
+    - df_drive_distance - a data frame of distance distance estimates
+    - df_drive_times - a data frame of drive time estimates
+    """
+
+    origin = DF_PRODUCER.set_index(["WellpadUnique"]).T.to_dict()
+    destination = DF_CONSUMER.set_index(["WellpadUnique"]).T.to_dict()
+
+    # Create empty dataframe df_pipe_distance with producer (origin) and consumer (destination) wellpad IDs as keys and empty dict output_distance
+    df_drive_distance = pd.DataFrame(
+            index=list(origin.keys()), columns=list(destination.keys())
+        )
+    df_drive_times = pd.DataFrame(
+            index=list(origin.keys()), columns=list(destination.keys())
+        )
+    output_distance = {}
+    
+    # iterate over producer and consumer IDs and calculate Haversine distances
+    for index_i, o_name in enumerate(origin):
+        for index_j, d_name in enumerate(destination):
+            # Direct Haversine distance, used for edge case checks
+            haversine_dist = Haversine_calcualtion(
+                origin[o_name]["Latitude"],
+                origin[o_name]["Longitude"],
+                destination[d_name]["Latitude"],
+                destination[d_name]["Longitude"]
+                )
+            # First check edge case conditionals
+            # 1. is the distance zero?
+            edge_case_1 = haversine_dist == 0
+            # 2. is the distance perfectly horizontal or vertical?
+            edge_case_2a = origin[o_name]["Latitude"] == destination[d_name]["Latitude"]
+            edge_case_2b = origin[o_name]["Longitude"] == destination[d_name]["Longitude"]
+            # Iterate over all origin-destination pairs:
+            if edge_case_1: # if distance is zero
+                output_distance[(o_name, d_name)] = 0
+            elif edge_case_2a or edge_case_2b: # if direction is perfectly NS or EW aligned
+                output_distance[(o_name, d_name)] = drive_efficiency_factor*haversine_dist
+            else: # we have nonzero NS and EW components
+                output_distance[(o_name, d_name)] = drive_efficiency_factor*(
+                    # Origin to corner point
+                    Haversine_calcualtion(
+                        origin[o_name]["Latitude"],
+                        origin[o_name]["Longitude"],
+                        origin[o_name]["Latitude"],
+                        destination[d_name]["Longitude"]
+                        ) +
+                    # Corner point to destination
+                    Haversine_calcualtion(
+                        origin[o_name]["Latitude"],
+                        destination[d_name]["Longitude"],
+                        destination[d_name]["Latitude"],
+                        destination[d_name]["Longitude"]
+                        )
+                    )
+            df_drive_distance.loc[o_name, d_name] = output_distance[(o_name, d_name)]
+            # Use average speed to determine a time estimate; use default of 25 mph
+            df_drive_times.loc[o_name, d_name] = output_distance[(o_name, d_name)]/drive_average_speed
+    
+    # Dataframes df_times and df_distance are output as dictionaries in JSON format whose directory
+        # and name are defined by variable 'distance_JSON'
+        # df_times_dict = df_to_dict_helper(df_times)
+        df_times_dict = df_drive_times.transpose().to_dict(orient="index")
+        # df_distance_dict = df_to_dict_helper(df_distance)
+        df_distance_dict = df_drive_distance.transpose().to_dict(orient="index")
+        with open(distance_JSON, "w") as data_file:
+            json.dump(
+                {"DriveTimes": df_times_dict, "DriveDistances": df_distance_dict},
+                data_file,
+                indent=2,
+            )
+
+    # Print a status update
+    print("Using Haversine-based distance estimates; API methods failed due to request size or site availability.")
+    return df_drive_times, df_drive_distance
+
+
+
+def get_pipeline_distance(distance_JSON, DF_PRODUCER, DF_CONSUMER):
+    """
+    Returns a dataframe of distances to be used as estimates of pipeline distance;
+    these are calculated as "great circle" (Haversine) distances under the assumption that
+    any layflat or temporary pipelines will be laid relatively straight between
+    its start and end points.
+    Inputs:
+    - distance_JSON - directory to distance JSON file
+    - DF_PRODUCER - Producer dataframe
+    - DF_CONSUMER - Consumer dataframe
+    Outputs:
+    - df_pipe_distance - a data frame of distance estimates
+    """
+
+    origin = DF_PRODUCER.set_index(["WellpadUnique"]).T.to_dict()
+    destination = DF_CONSUMER.set_index(["WellpadUnique"]).T.to_dict()
+
+    # Create empty dataframe df_pipe_distance with producer (origin) and consumer (destination) wellpad IDs as keys and empty dict output_distance
+    df_pipe_distance = pd.DataFrame(
+            index=list(origin.keys()), columns=list(destination.keys())
+        )
+    output_distance = {}
+    
+    # iterate over producer and consumer IDs and calculate Haversine distances
+    for index_i, o_name in enumerate(origin):
+        for index_j, d_name in enumerate(destination):
+            output_distance[(o_name, d_name)] = Haversine_calcualtion(
+                origin[o_name]["Latitude"],
+                origin[o_name]["Longitude"],
+                destination[d_name]["Latitude"],
+                destination[d_name]["Longitude"]
+                )
+            df_pipe_distance.loc[o_name, d_name] = output_distance[(o_name, d_name)]
+
+    # Append json distance file with pipeline distances
+    df_pipe_distance_dict = df_pipe_distance.transpose().to_dict(orient="index")
+    with open(distance_JSON, "r") as data_file:
+            json_data = json.load(data_file)
+    json_data["PipeDistances"] = df_pipe_distance_dict
+    with open(distance_JSON, "w") as data_file:
+            json.dump(
+                json_data,
+                data_file,
+                indent=2,
+            )
+
+    return df_pipe_distance
+
+
+def Haversine_calcualtion(origin_lat, origin_lon, destin_lat, destin_lon):
+    R = 3959 # Earth radius, in miles, measured at central Texas latitudes, assuming most users will be in this area
+
+    # Trigonometric functions default to radians; either use degree equivalents, or convert lat/lon coordinates to radians (here we do the latter)
+    origin_lat, origin_lon, destin_lat, destin_lon = map(radians, [origin_lat, origin_lon, destin_lat, destin_lon])
+
+    # Calculate lat/lon differences to simplify Haversine formula
+    delta_lon = destin_lon - origin_lon
+    delta_lat = destin_lat - origin_lat
+
+    # Haversine calculation
+    step_1 = sin(delta_lat/2)**2 + cos(origin_lat) * cos(destin_lat) * sin(delta_lon/2)**2
+    step_2 = 2 * asin(sqrt(step_1))
+    return R*step_2
