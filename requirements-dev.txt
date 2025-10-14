@@ -14,3 +14,4 @@ pandas==1.2.5
 idaes-pse==2.1.0
 plotly==5.11.0
 numpy==1.25.1
+datetime=5.5
