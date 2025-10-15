@@ -5,8 +5,7 @@ import yaml
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from runShare import run_watersharing
-from runTrade import run_watertrading
+from initiateMatch import run_watersharing, run_watertrading
 
 class EventHandler(FileSystemEventHandler):
     def __init__(self, in_path_sharing, ex_path_sharing, in_path_trading, ex_path_trading):
